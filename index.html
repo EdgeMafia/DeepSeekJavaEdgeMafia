@@ -45,13 +45,30 @@
         .form-group {
             margin: 15px 0;
         }
-        select, button {
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        select, input, button {
             padding: 12px 20px;
             border-radius: 8px;
             border: 1px solid #4ecdc4;
             background: #1a1a2e;
             color: white;
             font-size: 1rem;
+        }
+        input {
+            width: 200px;
+            text-align: center;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
         }
         button {
             cursor: pointer;
@@ -63,6 +80,22 @@
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(78, 205, 196, 0.4);
+        }
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .preset-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            background: #2d3436;
+        }
+        .preset-btn:hover {
+            background: #4ecdc4;
+            transform: translateY(-1px);
         }
         .game-header {
             display: flex;
@@ -118,6 +151,8 @@
         }
         .table-container {
             overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
         }
         table {
             width: 100%;
@@ -131,6 +166,8 @@
         th {
             background: rgba(78, 205, 196, 0.2);
             color: #4ecdc4;
+            position: sticky;
+            top: 0;
         }
         tr:hover {
             background: rgba(255,255,255,0.05);
@@ -191,33 +228,53 @@
         .bar.loyalty { background: linear-gradient(90deg, #4ecdc4, #00b894); }
         .bar.paranoia { background: linear-gradient(90deg, #a29bfe, #6c5ce7); }
         .bar.deceit { background: linear-gradient(90deg, #fd79a8, #e84393); }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+        .speed-control label {
+            font-size: 0.8rem;
+        }
+        .speed-control select {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+        }
         @media (max-width: 768px) {
             th, td { padding: 8px; font-size: 0.8rem; }
             .stats-dashboard { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <div class="container">
     <header>
         <h1>🔪 EDGEMAFIA</h1>
         <p class="subtitle">AI-Powered Social Deduction | Aston Walker</p>
-        <p style="font-size: 0.8rem; color: #666;">✨ Full AI simulation - No backend required! ✨</p>
+        <p style="font-size: 0.8rem; color: #666;">✨ Full AI simulation - Test ANY number of agents! ✨</p>
     </header>
 
     <div id="setupPanel" class="panel">
         <h2>Game Setup</h2>
         <div class="form-group">
-            <label>Number of AI Agents:</label>
-            <select id="agentCount">
-                <option value="6">6 Agents (Small)</option>
-                <option value="10" selected>10 Agents (Medium)</option>
-                <option value="15">15 Agents (Large)</option>
-                <option value="20">20 Agents (Epic)</option>
-            </select>
+            <label>🎲 Number of AI Agents (min 6, max 1000):</label>
+            <div class="input-group">
+                <input type="number" id="agentCountInput" min="6" max="1000" value="10" step="1">
+                <button id="startBtn">🎮 Start Game</button>
+            </div>
+            <div class="preset-buttons">
+                <button class="preset-btn" data-count="6">6 (Small)</button>
+                <button class="preset-btn" data-count="10">10 (Medium)</button>
+                <button class="preset-btn" data-count="15">15 (Large)</button>
+                <button class="preset-btn" data-count="20">20 (Epic)</button>
+                <button class="preset-btn" data-count="50">50 (Massive)</button>
+                <button class="preset-btn" data-count="100">100 (Insane)</button>
+            </div>
         </div>
-        <button id="startBtn">🎮 Start Game</button>
+        <div style="margin-top: 15px; font-size: 0.8rem; color: #888;">
+            ⚡ Mafia = ~1/6 of players | Doctor = 1-2 | Detective = 1-2 | Rest = Villagers
+        </div>
     </div>
 
     <div id="gamePanel" style="display: none;">
@@ -227,8 +284,18 @@
                 <span class="badge">Alive: <span id="aliveCount">0</span>/<span id="totalCount">0</span></span>
             </div>
             <div class="control-buttons">
-                <button id="nextCycleBtn" class="btn-secondary">▶ Next Cycle</button>
-                <button id="autoPlayBtn" class="btn-secondary">🤖 Auto Play</button>
+                <button id="nextCycleBtn">▶ Next Cycle</button>
+                <button id="autoPlayBtn">🤖 Auto Play</button>
+                <div class="speed-control">
+                    <label>Speed:</label>
+                    <select id="speedSelect">
+                        <option value="3000">Slow (3s)</option>
+                        <option value="1500" selected>Normal (1.5s)</option>
+                        <option value="800">Fast (0.8s)</option>
+                        <option value="300">Very Fast (0.3s)</option>
+                        <option value="100">Turbo (0.1s)</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -240,9 +307,9 @@
         </div>
 
         <div class="agent-section">
-            <h2>🤖 AI Agents</h2>
+            <h2>🤖 AI Agents <span id="agentCountDisplay"></span></h2>
             <div class="agent-controls">
-                <input type="text" id="agentSearch" placeholder="Search agents..." class="search-input">
+                <input type="text" id="agentSearch" placeholder="Search by name or ID..." class="search-input">
                 <select id="roleFilter">
                     <option value="all">All Roles</option>
                     <option value="Mafia">Mafia</option>
@@ -250,10 +317,20 @@
                     <option value="Doctor">Doctor</option>
                     <option value="Detective">Detective</option>
                 </select>
+                <select id="aliveFilter">
+                    <option value="all">All Agents</option>
+                    <option value="alive">Alive Only</option>
+                    <option value="dead">Dead Only</option>
+                </select>
             </div>
             <div class="table-container">
                 <table id="agentTable">
-                    <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Status</th><th>Aggression</th><th>Loyalty</th><th>Paranoia</th><th>Deceit</th><th>Reward</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>Name</th><th>Role</th><th>Status</th>
+                            <th>Aggression</th><th>Loyalty</th><th>Paranoia</th><th>Deceit</th><th>Reward</th>
+                        </tr>
+                    </thead>
                     <tbody id="agentTableBody"></tbody>
                 </table>
             </div>
@@ -261,19 +338,22 @@
 
         <div class="event-log">
             <h2>📜 Event Log</h2>
-            <div class="log-container" id="eventLog"><div class="log-entry system">Game ready. Click "Start Game" to begin!</div></div>
+            <div class="log-container" id="eventLog"><div class="log-entry system">Game ready. Choose agent count and click "Start Game"!</div></div>
         </div>
 
         <div class="player-panel" id="playerPanel" style="display: none;">
             <h2>🎮 Your Agent: <span id="playerAgentName">-</span></h2>
             <div class="player-stats" id="playerStats"></div>
+            <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">
+                👑 You automatically control Agent 0 (first agent)
+            </div>
         </div>
     </div>
 </div>
 
 <script>
     // ============================================================================
-    // GAME ENGINE (Pure JavaScript - No Backend)
+    // GAME ENGINE (Pure JavaScript - No Backend Required)
     // ============================================================================
     
     const ROLE_MAFIA = 0;
@@ -285,6 +365,7 @@
     let game = null;
     let autoPlayInterval = null;
     let currentAgentId = 0;
+    let currentSpeed = 1500;
     
     class Relationship {
         constructor() {
@@ -345,12 +426,13 @@
         createAgents(n) {
             this.agents = [];
             for (let i = 0; i < n; i++) {
-                this.agents.push(new Agent(i, `P${i}`, ROLE_VILLAGER, 0, 0, 0, 0));
+                this.agents.push(new Agent(i, `Agent_${i}`, ROLE_VILLAGER, 0, 0, 0, 0));
             }
             
+            // Role distribution
             const mafiaCount = Math.max(1, Math.floor(n / 6));
-            const doctorCount = n >= 7 ? 2 : 1;
-            const detectiveCount = n >= 7 ? 2 : 1;
+            const doctorCount = Math.min(Math.max(1, Math.floor(n / 8)), 3);
+            const detectiveCount = Math.min(Math.max(1, Math.floor(n / 8)), 3);
             
             const pool = [];
             for (let i = 0; i < mafiaCount; i++) pool.push(ROLE_MAFIA);
@@ -358,11 +440,13 @@
             for (let i = 0; i < detectiveCount; i++) pool.push(ROLE_DETECTIVE);
             while (pool.length < n) pool.push(ROLE_VILLAGER);
             
+            // Shuffle pool
             for (let i = pool.length - 1; i > 0; i--) {
                 const j = this.randInt(i + 1);
                 [pool[i], pool[j]] = [pool[j], pool[i]];
             }
             
+            // Trait bases by role
             const baseAgg = [0.7, 0.2, 0.3, 0.0];
             const spanAgg = [0.3, 0.4, 0.3, 0.2];
             const baseLoy = [0.4, 0.4, 0.6, 0.7];
@@ -380,6 +464,7 @@
                 this.agents[i].paranoia = basePar[k] + spanPar[k] * this.randFloat();
                 this.agents[i].deceit = baseDec[k] + spanDec[k] * this.randFloat();
                 
+                // Initialize relationships
                 for (let j = 0; j < n; j++) {
                     if (i !== j) {
                         const base = (this.randFloat() - 0.5) * 0.6;
@@ -387,7 +472,7 @@
                         rel.trust = base;
                         rel.liking = this.clampf(base * (0.7 + this.randFloat() * 0.6), -1, 1);
                         this.agents[i].relations.set(j, rel);
-                        const baseProb = mafiaCount / (n - 1);
+                        const baseProb = Math.min(0.5, mafiaCount / (n - 1));
                         this.agents[i].probMafia.set(j, i === j ? 0 : baseProb);
                     }
                 }
@@ -519,6 +604,7 @@
             let mafiaKill = -1, doctorSave = -1, detectiveCheck = -1, detectiveId = -1;
             const attacked = new Array(this.agents.length).fill(0);
             
+            // Find first alive mafia to choose kill
             for (let i = 0; i < this.agents.length; i++) {
                 if (this.agents[i].alive && this.agents[i].role === ROLE_MAFIA) {
                     mafiaKill = this.chooseMafiaTarget(i);
@@ -534,8 +620,11 @@
                 if (aliveNonMafia.length > 0) mafiaKill = aliveNonMafia[this.randInt(aliveNonMafia.length)];
             }
             
+            // Get doctor and detective actions
             for (let i = 0; i < this.agents.length; i++) {
-                if (this.agents[i].alive && this.agents[i].role === ROLE_DOCTOR) doctorSave = this.chooseDoctorSave(i, attacked);
+                if (this.agents[i].alive && this.agents[i].role === ROLE_DOCTOR) {
+                    doctorSave = this.chooseDoctorSave(i, attacked);
+                }
                 if (this.agents[i].alive && this.agents[i].role === ROLE_DETECTIVE) {
                     detectiveCheck = this.chooseDetectiveCheck(i);
                     detectiveId = i;
@@ -547,10 +636,10 @@
                 this.agents[mafiaKill].alive = false;
                 this.agents[mafiaKill].attacked++;
                 result.killed = mafiaKill;
-                result.actions.push(`${this.agents[mafiaKill].name} was killed at night.`);
+                result.actions.push(`💀 ${this.agents[mafiaKill].name} was killed at night. (${roleNames[this.agents[mafiaKill].role]})`);
             } else {
                 result.saved = true;
-                result.actions.push(`No one died tonight.`);
+                result.actions.push(`🛡️ No one died tonight.`);
             }
             
             if (detectiveCheck !== -1 && detectiveId !== -1) {
@@ -564,12 +653,12 @@
                     detective.paranoia = Math.min(1, detective.paranoia + 0.1);
                     rel.trust = this.clampf(rel.trust - 1, -1, 1);
                     detective.probMafia.set(detectiveCheck, 0.95);
-                    result.actions.push(`Detective secretly checked ${target.name} - MAFIA!`);
+                    result.actions.push(`🕵️ Detective secretly checked ${target.name} - MAFIA!`);
                 } else {
                     rel.knownTown = true;
                     rel.trust = this.clampf(rel.trust + 1, -1, 1);
                     detective.probMafia.set(detectiveCheck, 0.01);
-                    result.actions.push(`Detective secretly checked ${target.name} - Town.`);
+                    result.actions.push(`🕵️ Detective secretly checked ${target.name} - Town.`);
                 }
             }
             return result;
@@ -585,7 +674,7 @@
                     const target = this.chooseLynchTarget(i);
                     votes[i] = target;
                     if (target !== -1) {
-                        result.accusations.push(`${this.agents[i].name} accuses ${this.agents[target].name}`);
+                        result.accusations.push(`🗣️ ${this.agents[i].name} accuses ${this.agents[target].name}`);
                         voteCount[target]++;
                     }
                 }
@@ -599,7 +688,9 @@
                 }
             }
             
-            const majority = Math.ceil(this.agents.filter(a => a.alive).length / 2);
+            const aliveCount = this.agents.filter(a => a.alive).length;
+            const majority = Math.ceil(aliveCount / 2);
+            
             if (lynchTarget !== -1 && maxVotes >= majority) {
                 const wasMafia = this.agents[lynchTarget].role === ROLE_MAFIA;
                 this.agents[lynchTarget].alive = false;
@@ -618,6 +709,9 @@
                         this.agents[i].totalReward += wasMafia ? 0.4 : -0.1;
                     }
                 }
+                result.accusations.push(`⚖️ ${this.agents[lynchTarget].name} was lynched! ${wasMafia ? 'MAFIA caught!' : 'Town mistakenly killed...'}`);
+            } else {
+                result.accusations.push(`🤝 No consensus reached. No one is lynched today.`);
             }
             return result;
         }
@@ -678,7 +772,7 @@
         const eventLog = document.getElementById('eventLog');
         eventLog.appendChild(logDiv);
         eventLog.scrollTop = eventLog.scrollHeight;
-        while (eventLog.children.length > 100) eventLog.removeChild(eventLog.firstChild);
+        while (eventLog.children.length > 200) eventLog.removeChild(eventLog.firstChild);
     }
     
     function updateUI() {
@@ -689,6 +783,7 @@
         document.getElementById('aliveCount').innerText = state.aliveCount;
         document.getElementById('totalCount').innerText = state.totalAgents;
         document.getElementById('cycleCount').innerText = state.cycle;
+        document.getElementById('agentCountDisplay').innerHTML = `(${state.totalAgents} total)`;
         
         let mafiaCount = 0, townCount = 0;
         state.agents.forEach(agent => {
@@ -706,31 +801,31 @@
         }
         
         // Player panel
-        if (currentAgentId !== null) {
-            const playerAgent = state.agents.find(a => a.id === currentAgentId);
-            if (playerAgent) {
-                document.getElementById('playerPanel').style.display = 'block';
-                document.getElementById('playerAgentName').innerText = playerAgent.name;
-                const statsDiv = document.getElementById('playerStats');
-                statsDiv.innerHTML = `
-                    <div class="trait-bar"><span>Aggression</span><div class="bar-container"><div class="bar" style="width: ${(playerAgent.aggression + 1) / 2 * 100}%"></div></div><span>${playerAgent.aggression.toFixed(3)}</span></div>
-                    <div class="trait-bar"><span>Loyalty</span><div class="bar-container"><div class="bar loyalty" style="width: ${(playerAgent.loyalty + 1) / 2 * 100}%"></div></div><span>${playerAgent.loyalty.toFixed(3)}</span></div>
-                    <div class="trait-bar"><span>Paranoia</span><div class="bar-container"><div class="bar paranoia" style="width: ${(playerAgent.paranoia + 1) / 2 * 100}%"></div></div><span>${playerAgent.paranoia.toFixed(3)}</span></div>
-                    <div class="trait-bar"><span>Deceit</span><div class="bar-container"><div class="bar deceit" style="width: ${(playerAgent.deceit + 1) / 2 * 100}%"></div></div><span>${playerAgent.deceit.toFixed(3)}</span></div>
-                    <div class="trait-bar"><span>Reward</span><div class="bar-container"><div class="bar" style="width: ${Math.min(100, (playerAgent.totalReward + 2) * 25)}%"></div></div><span>${playerAgent.totalReward.toFixed(3)}</span></div>
-                `;
-                if (!playerAgent.alive) document.getElementById('playerPanel').style.opacity = '0.5';
-                else document.getElementById('playerPanel').style.opacity = '1';
-            }
+        if (currentAgentId !== null && state.agents[currentAgentId]) {
+            const playerAgent = state.agents[currentAgentId];
+            document.getElementById('playerPanel').style.display = 'block';
+            document.getElementById('playerAgentName').innerText = `${playerAgent.name} (${playerAgent.role})`;
+            const statsDiv = document.getElementById('playerStats');
+            statsDiv.innerHTML = `
+                <div class="trait-bar"><span>Aggression</span><div class="bar-container"><div class="bar" style="width: ${(playerAgent.aggression + 1) / 2 * 100}%"></div></div><span>${playerAgent.aggression.toFixed(3)}</span></div>
+                <div class="trait-bar"><span>Loyalty</span><div class="bar-container"><div class="bar loyalty" style="width: ${(playerAgent.loyalty + 1) / 2 * 100}%"></div></div><span>${playerAgent.loyalty.toFixed(3)}</span></div>
+                <div class="trait-bar"><span>Paranoia</span><div class="bar-container"><div class="bar paranoia" style="width: ${(playerAgent.paranoia + 1) / 2 * 100}%"></div></div><span>${playerAgent.paranoia.toFixed(3)}</span></div>
+                <div class="trait-bar"><span>Deceit</span><div class="bar-container"><div class="bar deceit" style="width: ${(playerAgent.deceit + 1) / 2 * 100}%"></div></div><span>${playerAgent.deceit.toFixed(3)}</span></div>
+                <div class="trait-bar"><span>Reward</span><div class="bar-container"><div class="bar" style="width: ${Math.min(100, (playerAgent.totalReward + 2) * 25)}%"></div></div><span>${playerAgent.totalReward.toFixed(3)}</span></div>
+                <div class="trait-bar"><span>Status</span><div class="bar-container"><div class="bar" style="width: ${playerAgent.alive ? 100 : 0}%; background: ${playerAgent.alive ? '#4ecdc4' : '#ff6b6b'}"></div></div><span>${playerAgent.alive ? 'ALIVE' : 'DEAD'}</span></div>
+            `;
         }
         
-        // Render table
+        // Render table with filters
         const searchTerm = document.getElementById('agentSearch')?.value.toLowerCase() || '';
         const roleFilter = document.getElementById('roleFilter')?.value || 'all';
+        const aliveFilter = document.getElementById('aliveFilter')?.value || 'all';
+        
         const filteredAgents = state.agents.filter(agent => {
             const matchesSearch = agent.name.toLowerCase().includes(searchTerm) || agent.id.toString().includes(searchTerm);
             const matchesRole = roleFilter === 'all' || agent.role === roleFilter;
-            return matchesSearch && matchesRole;
+            const matchesAlive = aliveFilter === 'all' || (aliveFilter === 'alive' && agent.alive) || (aliveFilter === 'dead' && !agent.alive);
+            return matchesSearch && matchesRole && matchesAlive;
         });
         
         const tbody = document.getElementById('agentTableBody');
@@ -755,24 +850,19 @@
         const result = game.runCycle();
         
         if (result.night) {
-            addLogEntry(`=== NIGHT ${game.cycle} ===`, 'night');
+            addLogEntry(`🌙 NIGHT ${game.cycle}`, 'night');
             result.night.actions.forEach(a => addLogEntry(a, 'night'));
-            if (result.night.detectiveCheck) {
-                addLogEntry(`Detective checked Agent ${result.night.detectiveCheck.target} - ${result.night.detectiveCheck.isMafia ? 'MAFIA!' : 'Town'}`, 'info');
-            }
         }
-        if (result.day && result.day.lynched !== -1) {
-            addLogEntry(`=== DAY ${game.cycle} ===`, 'day');
+        if (result.day && result.day.accusations.length > 0) {
+            addLogEntry(`☀️ DAY ${game.cycle}`, 'day');
             result.day.accusations.forEach(a => addLogEntry(a, 'day'));
-            addLogEntry(`Agent ${result.day.lynched} was lynched! ${result.day.wasMafia ? 'MAFIA caught!' : 'Town mistakenly killed...'}`, 'kill');
         }
         if (result.gameOver) {
             addLogEntry(`═══════════════════════════════════`, 'system');
             addLogEntry(`🏆 GAME OVER - ${result.winner} VICTORY! 🏆`, 'system');
             addLogEntry(`═══════════════════════════════════`, 'system');
             if (autoPlayInterval) { clearInterval(autoPlayInterval); autoPlayInterval = null; }
-            document.getElementById('nextCycleBtn').disabled = true;
-            document.getElementById('autoPlayBtn').disabled = true;
+            document.getElementById('autoPlayBtn').innerHTML = '🤖 Auto Play';
         }
         
         updateUI();
@@ -781,20 +871,33 @@
     
     // Event Listeners
     document.getElementById('startBtn').addEventListener('click', () => {
-        const agentCount = parseInt(document.getElementById('agentCount').value);
+        let agentCount = parseInt(document.getElementById('agentCountInput').value);
+        if (isNaN(agentCount)) agentCount = 10;
+        if (agentCount < 6) agentCount = 6;
+        if (agentCount > 1000) agentCount = 1000;
+        
         game = new Game(agentCount);
-        currentAgentId = 0; // First agent is the player's agent
+        currentAgentId = 0;
         
         document.getElementById('setupPanel').style.display = 'none';
         document.getElementById('gamePanel').style.display = 'block';
         
         updateUI();
-        addLogEntry(`Game started with ${agentCount} agents!`, 'system');
-        addLogEntry(`You are controlling ${game.agents[0].name} (Agent 0)`, 'info');
-        addLogEntry(`Click "Next Cycle" to advance the game or "Auto Play" to watch automatically.`, 'system');
+        addLogEntry(`🎮 GAME STARTED with ${agentCount} agents!`, 'system');
+        addLogEntry(`📊 Role distribution: Mafia=${Math.max(1, Math.floor(agentCount/6))}, Doctor=${Math.min(Math.max(1, Math.floor(agentCount/8)), 3)}, Detective=${Math.min(Math.max(1, Math.floor(agentCount/8)), 3)}`, 'system');
+        addLogEntry(`👑 You are controlling ${game.agents[0].name} (${roleNames[game.agents[0].role]})`, 'info');
+        addLogEntry(`Click "Next Cycle" to advance or "Auto Play" to watch automatically.`, 'system');
         
         document.getElementById('nextCycleBtn').disabled = false;
         document.getElementById('autoPlayBtn').disabled = false;
+    });
+    
+    // Preset buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const count = parseInt(btn.dataset.count);
+            document.getElementById('agentCountInput').value = count;
+        });
     });
     
     document.getElementById('nextCycleBtn').addEventListener('click', () => {
@@ -807,6 +910,7 @@
             autoPlayInterval = null;
             document.getElementById('autoPlayBtn').innerHTML = '🤖 Auto Play';
         } else {
+            const speed = parseInt(document.getElementById('speedSelect').value);
             autoPlayInterval = setInterval(() => {
                 if (!game || !game.gameActive) {
                     clearInterval(autoPlayInterval);
@@ -815,13 +919,31 @@
                 } else {
                     runCycleAndUpdate();
                 }
-            }, 1500);
+            }, speed);
             document.getElementById('autoPlayBtn').innerHTML = '⏸ Stop';
+        }
+    });
+    
+    document.getElementById('speedSelect').addEventListener('change', () => {
+        if (autoPlayInterval) {
+            // Restart auto play with new speed
+            clearInterval(autoPlayInterval);
+            const speed = parseInt(document.getElementById('speedSelect').value);
+            autoPlayInterval = setInterval(() => {
+                if (!game || !game.gameActive) {
+                    clearInterval(autoPlayInterval);
+                    autoPlayInterval = null;
+                    document.getElementById('autoPlayBtn').innerHTML = '🤖 Auto Play';
+                } else {
+                    runCycleAndUpdate();
+                }
+            }, speed);
         }
     });
     
     document.getElementById('agentSearch')?.addEventListener('input', () => updateUI());
     document.getElementById('roleFilter')?.addEventListener('change', () => updateUI());
+    document.getElementById('aliveFilter')?.addEventListener('change', () => updateUI());
 </script>
 </body>
 </html>
