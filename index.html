@@ -20,6 +20,29 @@
             padding: 15px;
             margin-bottom: 20px;
         }
+        
+        /* NEW TITLE SECTION */
+        .title-section {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #0f0;
+            padding-bottom: 10px;
+        }
+        
+        .main-title {
+            font-size: 48px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            color: #0f0;
+            text-shadow: 0 0 10px #0f0;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: #888;
+            letter-spacing: 2px;
+        }
+        
         .stats {
             display: flex;
             gap: 20px;
@@ -119,6 +142,12 @@
 <body>
 <div class="container">
     <div class="hud">
+        <!-- NEW TITLE SECTION -->
+        <div class="title-section">
+            <div class="main-title">EDGEMAFIA</div>
+            <div class="subtitle">by Aston Walker</div>
+        </div>
+        
         <div class="stats">
             <div class="stat">
                 <div class="stat-label">CYCLE</div>
@@ -176,13 +205,11 @@
     let agents = [];
     
     function connect() {
-        // FIXED: Use the current hostname with correct WebSocket port/protocol
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // On Render, WebSocket connects to same host (no port needed)
-        // TO (correct - your Render backend):
-		const wsUrl = `wss://edgemafia-neural.onrender.com`;
-    console.log('Connecting to:', wsUrl);
-    ws = new WebSocket(wsUrl);
+        const wsUrl = `${protocol}//${window.location.host}`;
+        console.log('Connecting to WebSocket:', wsUrl);
+        
+        ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
