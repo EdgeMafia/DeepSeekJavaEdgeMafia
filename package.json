@@ -1,13 +1,18 @@
 {
-  "name": "edgemafia-neural",
+  "name": "edgemafia-pure-ai",
   "version": "1.0.0",
-  "description": "EdgeMafia Neural AI - Social Deduction Game",
+  "description": "Pure AI Mafia Game - Neural Networks on Render Free Tier",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
   },
   "engines": {
     "node": ">=18.0.0"

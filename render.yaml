@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: edgemafia-pure-ai
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: SUPABASE_URL
+        value: https://wmyetsdnkqudintfukk.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+    healthCheckPath: /health

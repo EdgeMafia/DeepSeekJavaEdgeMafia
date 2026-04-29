@@ -1,1119 +1,354 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EDGEMAFIA 100K - NEURAL NETWORK AI</title>
+    <title>EdgeMafia - Pure AI Mafia Game</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { box-sizing: border-box; }
         body {
             background: #0a0a0a;
-            font-family: 'Share Tech Mono', 'Courier New', monospace;
-            min-height: 100vh;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            margin: 0;
             padding: 20px;
         }
+        .container { max-width: 1400px; margin: 0 auto; }
         
-        /* CRT Scanline Effect */
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: repeating-linear-gradient(
-                0deg,
-                rgba(0, 255, 0, 0.03) 0px,
-                rgba(0, 255, 0, 0.03) 2px,
-                transparent 2px,
-                transparent 4px
-            );
-            pointer-events: none;
-            z-index: 999;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        /* ===== BLOCKY PIXEL HEADER ===== */
-        .pixel-header {
-            text-align: center;
-            margin-bottom: 30px;
-            border: 3px solid #00ff41;
-            background: #0a0a0a;
-            padding: 20px;
-            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
-        }
-        
-        .pixel-logo {
-            font-family: monospace;
-            font-size: 3rem;
-            font-weight: bold;
-            letter-spacing: 4px;
-            color: #00ff41;
-            text-shadow: 3px 3px 0px #008f00, 6px 6px 0px #003d00;
-            display: inline-block;
-            padding: 10px 20px;
-            border: 2px solid #00ff41;
-            background: #0a0a0a;
-            white-space: pre;
-        }
-        
-        /* ===== SYSTEM PANEL ===== */
-        .system-panel {
-            background: #0a0a0a;
-            border: 2px solid #00ff41;
-            margin-bottom: 20px;
-            padding: 20px;
-            box-shadow: 5px 5px 0px #003d00;
-        }
-        
-        .panel-title {
-            color: #00ff41;
-            font-size: 1.2rem;
-            border-bottom: 1px solid #00ff41;
-            padding-bottom: 8px;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        
-        .panel-title::before {
-            content: ">";
-            margin-right: 8px;
-            color: #00ff41;
-        }
-        
-        /* ===== STATUS GRID ===== */
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .status-card {
-            background: #050505;
-            border: 1px solid #00ff41;
+        .hud {
+            background: #000;
+            border: 2px solid #0f0;
+            border-radius: 10px;
             padding: 15px;
-            text-align: center;
-        }
-        
-        .status-label {
-            color: #00cc33;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 8px;
-        }
-        
-        .status-value {
-            color: #00ff41;
-            font-size: 1.8rem;
-            font-weight: bold;
-            font-family: monospace;
-        }
-        
-        /* ===== NEURAL VIZ ===== */
-        .neural-viz {
-            background: #050505;
-            border: 1px solid #00ff41;
-            padding: 20px;
             margin-bottom: 20px;
-            overflow-x: auto;
         }
-        
-        .layer-container {
+        .stats {
             display: flex;
-            justify-content: center;
-            align-items: center;
             gap: 20px;
-            flex-wrap: wrap;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
         }
-        
-        .layer {
-            text-align: center;
-            background: rgba(0, 255, 65, 0.05);
-            padding: 15px;
-            border: 1px solid #00ff41;
+        .stat {
+            background: #111;
+            padding: 8px 15px;
+            border-radius: 5px;
         }
-        
-        .layer-title {
-            color: #00ff41;
-            font-size: 0.7rem;
-            margin-bottom: 10px;
-        }
-        
-        .neuron-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 5px;
-        }
-        
-        .neuron-pixel {
-            width: 25px;
-            height: 25px;
-            background: #00ff41;
-            opacity: 0.3;
-            border: 1px solid #003d00;
-        }
-        
-        .arrow {
-            color: #00ff41;
-            font-size: 2rem;
-            font-family: monospace;
-        }
-        
-        /* ===== AGENT TABLE ===== */
-        .agent-table-container {
-            background: #050505;
-            border: 1px solid #00ff41;
-            max-height: 400px;
-            overflow-y: auto;
-        }
+        .stat-label { color: #888; font-size: 12px; }
+        .stat-value { font-size: 24px; font-weight: bold; }
+        .mafia { color: #f00; }
+        .town { color: #0f0; }
         
         .agent-table {
             width: 100%;
             border-collapse: collapse;
-            font-family: monospace;
-            font-size: 0.8rem;
         }
-        
-        .agent-table th {
-            background: #0a330a;
-            color: #00ff41;
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #00ff41;
-            position: sticky;
-            top: 0;
-        }
-        
-        .agent-table td {
+        .agent-table th, .agent-table td {
             padding: 8px;
-            border-bottom: 1px solid #1a3a1a;
-            color: #88ff88;
+            text-align: left;
+            border-bottom: 1px solid #333;
         }
+        .agent-table th { background: #111; color: #0f0; }
+        .agent-table tr:hover { background: #111; }
+        .dead { opacity: 0.4; }
         
-        .agent-table tr:hover {
-            background: rgba(0, 255, 65, 0.1);
+        .trait-bar {
+            width: 80px;
+            height: 16px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
         }
-        
-        .status-alive { color: #00ff41; }
-        .status-dead { color: #ff4444; text-decoration: line-through; }
-        
-        /* ===== EVENT LOG ===== */
-        .event-log {
-            background: #050505;
-            border: 1px solid #00ff41;
-            padding: 15px;
-            margin-bottom: 20px;
-            height: 200px;
-            overflow-y: auto;
+        .trait-fill {
+            height: 100%;
+            transition: width 0.2s;
         }
+        .trait-fill.positive { background: #0f0; }
+        .trait-fill.negative { background: #f00; }
+        .trait-value { font-size: 11px; margin-left: 5px; }
         
-        .log-entry {
-            font-family: monospace;
-            font-size: 0.8rem;
-            padding: 5px;
-            border-bottom: 1px solid #1a3a1a;
-            color: #88ff88;
-        }
-        
-        .log-entry::before {
-            content: ">";
-            margin-right: 10px;
-            color: #00ff41;
-        }
-        
-        .log-entry.night { color: #aa88ff; }
-        .log-entry.day { color: #ffaa44; }
-        .log-entry.system { color: #00ff41; }
-        
-        /* ===== BUTTONS ===== */
-        .button-group {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
+        .controls {
             margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
-        
-        .pixel-btn {
-            background: #0a0a0a;
-            border: 2px solid #00ff41;
-            color: #00ff41;
-            padding: 12px 24px;
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
             font-family: monospace;
-            font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            transition: all 0.1s ease;
+            border-radius: 5px;
         }
-        
-        .pixel-btn:hover {
-            background: #00ff41;
-            color: #0a0a0a;
-            box-shadow: 0 0 15px #00ff41;
-        }
-        
-        /* ===== PROGRESS BAR ===== */
-        .progress-container {
-            background: #050505;
-            border: 1px solid #00ff41;
-            padding: 3px;
-            margin: 15px 0;
-        }
-        
-        .progress-fill {
-            background: #00ff41;
-            height: 25px;
-            width: 0%;
-            transition: width 0.1s linear;
-        }
-        
-        /* ===== INPUTS ===== */
-        .pixel-input {
-            background: #0a0a0a;
-            border: 1px solid #00ff41;
-            color: #00ff41;
+        button:hover { background: #0a0; }
+        .nudge-group {
+            background: #111;
             padding: 10px;
-            font-family: monospace;
-            font-size: 1rem;
+            border-radius: 5px;
+            margin-top: 10px;
         }
-        
-        .form-row {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin: 15px 0;
-        }
-        
-        .form-row label {
-            color: #00ff41;
+        select, input {
+            background: #222;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
             font-family: monospace;
         }
         
-        /* ===== LOADING SCREEN ===== */
-        .loading-overlay {
+        .status {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #0a0a0a;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            font-family: monospace;
+            top: 10px;
+            right: 10px;
+            background: #000;
+            border: 1px solid #0f0;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 5px;
         }
-        
-        .loading-text {
-            color: #00ff41;
-            font-size: 1.2rem;
-            margin: 20px;
-        }
-        
-        .blinking-cursor {
-            display: inline-block;
-            width: 10px;
-            height: 20px;
-            background: #00ff41;
-            animation: blink 1s infinite;
-            margin-left: 5px;
-        }
-        
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #0a0a0a;
-            border: 1px solid #00ff41;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #00ff41;
-        }
-        
-        .training-active {
-            animation: pulse 0.5s infinite;
-        }
+        .connected { color: #0f0; }
+        .disconnected { color: #f00; }
         
         @keyframes pulse {
-            0%, 100% { border-color: #00ff41; }
-            50% { border-color: #ffaa44; box-shadow: 0 0 20px #ffaa44; }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
     </style>
 </head>
 <body>
-
-<!-- LOADING SCREEN -->
-<div id="loadingScreen" class="loading-overlay">
-    <div class="pixel-logo">╔═══════════════╗<br>║  EDGEMAFIA   ║<br>║    100K      ║<br>╚═══════════════╝</div>
-    <div class="loading-text">INITIALISING NEURAL NETWORKS...</div>
-    <div class="progress-container" style="width: 400px;">
-        <div class="progress-fill" id="loadProgress" style="width: 0%;"></div>
+<div class="container">
+    <div class="hud">
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label">CYCLE</div>
+                <div class="stat-value" id="cycle">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">MAFIA</div>
+                <div class="stat-value mafia" id="mafiaCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">TOWN</div>
+                <div class="stat-value town" id="townCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">TOTAL</div>
+                <div class="stat-value" id="totalCount">0</div>
+            </div>
+        </div>
+        
+        <table class="agent-table">
+            <thead>
+                <tr><th>ID</th><th>NAME</th><th>ROLE</th><th>AGG</th><th>LOY</th><th>PAR</th><th>DEC</th><th>REWARD</th><th>NUDGE</th></tr>
+            </thead>
+            <tbody id="agentTable"></tbody>
+        </table>
+        
+        <div class="controls">
+            <button id="nextCycleBtn">▶ NEXT CYCLE</button>
+            <button id="newGameBtn">🔄 NEW GAME</button>
+        </div>
+        
+        <div class="nudge-group">
+            <strong>NUDGE SELECTED AGENT:</strong>
+            <select id="nudgeAgentSelect"></select>
+            <select id="nudgeTraitSelect">
+                <option value="aggression">Aggression</option>
+                <option value="loyalty">Loyalty</option>
+                <option value="paranoia">Paranoia</option>
+                <option value="deceit">Deceit</option>
+            </select>
+            <button id="nudgeUpBtn">+0.1</button>
+            <button id="nudgeDownBtn">-0.1</button>
+            <span style="margin-left: 10px; font-size: 12px;">(Or use Gamepad: A=next, X=nudge+)</span>
+        </div>
     </div>
-    <div id="loadStatus" style="color: #88ff88; font-family: monospace; margin-top: 10px;">LOADER READY</div>
-    <div class="blinking-cursor"></div>
 </div>
 
-<div class="container">
-    <!-- PIXEL HEADER -->
-    <div class="pixel-header">
-        <div class="pixel-logo">╔══════════════════╗<br>║   EDGEMAFIA     ║<br>║      100K       ║<br>╚══════════════════╝</div>
-        <div style="color: #00ff41; margin-top: 10px;">┌─────────────────────────────────────────────────┐<br>│  NEURAL NETWORK AI  │  LSTM MEMORY  │  REAL-TIME LEARNING  │<br>└─────────────────────────────────────────────────┘</div>
-    </div>
-
-    <!-- SETUP PANEL -->
-    <div id="setupPanel" class="system-panel">
-        <div class="panel-title">SYSTEM INITIALISATION</div>
-        
-        <div class="form-row">
-            <label>> AGENT_COUNT:</label>
-            <input type="number" id="agentCount" min="2" max="100" value="10" class="pixel-input" step="1">
-            <label>> TRAINING_CYCLES:</label>
-            <input type="number" id="trainCycles" min="10" max="1000" value="200" class="pixel-input" step="50">
-        </div>
-        
-        <div class="button-group">
-            <button id="trainBtn" class="pixel-btn">[ TRAIN NEURAL NETWORKS ]</button>
-            <button id="startBtn" class="pixel-btn">[ INITIALISE GAME ]</button>
-        </div>
-        
-        <!-- TRAINING PANEL - VISIBLE DURING TRAINING -->
-        <div id="trainingPanel" style="display: none; margin-top: 20px; border: 2px solid #00ff41; padding: 15px; background: #050505;">
-            <div class="panel-title" style="margin-bottom: 10px;">TRAINING IN PROGRESS</div>
-            <div class="progress-container">
-                <div class="progress-fill" id="trainProgress" style="width: 0%;"></div>
-            </div>
-            <div id="trainPercent" style="color: #00ff41; text-align: center; font-size: 1.5rem; margin: 10px;">0%</div>
-            <div id="trainStatus" style="color: #88ff88; text-align: center; font-family: monospace;">INITIALIZING...</div>
-            <div id="trainLoss" style="color: #ffaa44; text-align: center; font-size: 0.8rem; margin-top: 10px;">LOSS: ---</div>
-        </div>
-        
-        <!-- Neural Network Viz -->
-        <div class="neural-viz">
-            <div class="panel-title" style="margin-bottom: 15px;">NEURAL ARCHITECTURE</div>
-            <div class="layer-container">
-                <div class="layer">
-                    <div class="layer-title">INPUT LAYER</div>
-                    <div class="neuron-grid" id="inputViz"></div>
-                    <div style="font-size: 0.6rem; margin-top: 5px;">10 NEURONS</div>
-                </div>
-                <div class="arrow">→</div>
-                <div class="layer">
-                    <div class="layer-title">HIDDEN LAYER</div>
-                    <div class="neuron-grid" id="hiddenViz"></div>
-                    <div style="font-size: 0.6rem; margin-top: 5px;">16 NEURONS | TANH</div>
-                </div>
-                <div class="arrow">→</div>
-                <div class="layer">
-                    <div class="layer-title">OUTPUT LAYER</div>
-                    <div class="neuron-grid" id="outputViz"></div>
-                    <div style="font-size: 0.6rem; margin-top: 5px;">5 Q-VALUES</div>
-                </div>
-            </div>
-            <div style="margin-top: 15px; text-align: center; font-size: 0.7rem; color: #88ff88;">
-                ═══════════════════════════════════════════════════════════<br>
-                WEIGHT MATRIX: 10×16 + 16×5 = 240 PARAMETERS | ADAM OPTIMIZER | BACKPROPAGATION<br>
-                LSTM MEMORY PER AGENT: 4-D VECTOR | FORGET/INPUT/OUTPUT GATES
-            </div>
-        </div>
-        
-        <div class="status-grid">
-            <div class="status-card">
-                <div class="status-label">SYSTEM STATUS</div>
-                <div class="status-value" id="sysStatus">STANDBY</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">NN WEIGHTS</div>
-                <div class="status-value" id="weightCount">0</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">GRAPHENE INTERFACE</div>
-                <div class="status-value" id="grapheneStatus">LOADED</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">SHARED MEMORY</div>
-                <div class="status-value" id="memStatus">OK</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- GAME PANEL -->
-    <div id="gamePanel" style="display: none;">
-        <div class="status-grid">
-            <div class="status-card">
-                <div class="status-label">🐺 MAFIA ALIVE</div>
-                <div class="status-value" id="mafiaCount">0</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">🏘️ TOWN ALIVE</div>
-                <div class="status-value" id="townCount">0</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">🔄 CYCLE</div>
-                <div class="status-value" id="cycleCount">0</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">🧠 NN STATUS</div>
-                <div class="status-value" id="nnStatus">ACTIVE</div>
-            </div>
-            <div class="status-card">
-                <div class="status-label">👥 AGENTS</div>
-                <div class="status-value" id="agentCountDisplay">0/0</div>
-            </div>
-        </div>
-
-        <div class="system-panel">
-            <div class="panel-title">AI AGENTS DATABASE</div>
-            <div class="agent-table-container">
-                <table class="agent-table" id="agentTable">
-                    <thead>
-                        <tr><th>ID</th><th>DESIGNATION</th><th>ROLE</th><th>STATUS</th><th>LSTM MEMORY</th><th>REWARD</th></tr>
-                    </thead>
-                    <tbody id="agentTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="system-panel">
-            <div class="panel-title">SYSTEM LOG</div>
-            <div class="event-log" id="eventLog">
-                <div class="log-entry system">> SYSTEM INITIALISED</div>
-                <div class="log-entry system">> WAITING FOR USER INPUT</div>
-            </div>
-        </div>
-
-        <div class="button-group">
-            <button id="nextCycleBtn" class="pixel-btn">[ NEXT CYCLE ]</button>
-            <button id="autoPlayBtn" class="pixel-btn">[ AUTO PLAY ]</button>
-            <button id="resetBtn" class="pixel-btn">[ NEW GAME ]</button>
-        </div>
-    </div>
+<div class="status" id="status">
+    <span class="disconnected">●</span> Disconnected
 </div>
 
 <script>
-    // ============================================================================
-    // EDGEMAFIA 100K - VISIBLE NEURAL NETWORK TRAINING
-    // ============================================================================
+    let ws = null;
+    let currentGameId = null;
+    let agents = [];
     
-    const INPUT_SIZE = 10;
-    const HIDDEN_SIZE = 16;
-    const OUTPUT_SIZE = 5;
-    const MEMORY_SIZE = 4;
-    
-    // ===== MATRIX CLASS =====
-    class Matrix {
-        constructor(rows, cols, data = null) {
-            this.rows = rows;
-            this.cols = cols;
-            this.data = data || Array(rows).fill().map(() => Array(cols).fill(0));
-        }
+    function connect() {
+        // FIXED: Use the current hostname with correct WebSocket port/protocol
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // On Render, WebSocket connects to same host (no port needed)
+        const wsUrl = `${protocol}//${window.location.host}`;
+        console.log('Connecting to WebSocket:', wsUrl);
         
-        static random(rows, cols, scale = 0.1) {
-            const data = Array(rows).fill().map(() => Array(cols).fill().map(() => (Math.random() - 0.5) * 2 * scale));
-            return new Matrix(rows, cols, data);
-        }
+        ws = new WebSocket(wsUrl);
         
-        static zeros(rows, cols) { return new Matrix(rows, cols); }
+        ws.onopen = () => {
+            document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
+            ws.send(JSON.stringify({ type: 'join_game', gameId: 'game_auto', createNew: true, n: 20 }));
+        };
         
-        multiply(other) {
-            if (other instanceof Matrix) {
-                const result = new Matrix(this.rows, other.cols);
-                for (let i = 0; i < this.rows; i++)
-                    for (let j = 0; j < other.cols; j++) {
-                        let sum = 0;
-                        for (let k = 0; k < this.cols; k++) sum += this.data[i][k] * other.data[k][j];
-                        result.data[i][j] = sum;
-                    }
-                return result;
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'state') {
+                updateUI(msg.data);
             }
-            return this;
-        }
-        
-        add(other) {
-            const result = new Matrix(this.rows, this.cols);
-            for (let i = 0; i < this.rows; i++)
-                for (let j = 0; j < this.cols; j++)
-                    result.data[i][j] = this.data[i][j] + (other instanceof Matrix ? other.data[i][j] : other);
-            return result;
-        }
-        
-        subtract(other) {
-            const result = new Matrix(this.rows, this.cols);
-            for (let i = 0; i < this.rows; i++)
-                for (let j = 0; j < this.cols; j++)
-                    result.data[i][j] = this.data[i][j] - (other instanceof Matrix ? other.data[i][j] : other);
-            return result;
-        }
-        
-        transpose() {
-            const result = new Matrix(this.cols, this.rows);
-            for (let i = 0; i < this.rows; i++)
-                for (let j = 0; j < this.cols; j++)
-                    result.data[j][i] = this.data[i][j];
-            return result;
-        }
-        
-        apply(fn) {
-            for (let i = 0; i < this.rows; i++)
-                for (let j = 0; j < this.cols; j++)
-                    this.data[i][j] = fn(this.data[i][j]);
-            return this;
-        }
-        
-        clone() { return new Matrix(this.rows, this.cols, this.data.map(row => [...row])); }
-    }
-    
-    function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
-    function tanh(x) { return Math.tanh(x); }
-    function tanhDerivative(x) { return 1 - x * x; }
-    
-    // ===== NEURAL NETWORK =====
-    class NeuralNetwork {
-        constructor(inputSize, hiddenSize, outputSize) {
-            this.inputSize = inputSize;
-            this.hiddenSize = hiddenSize;
-            this.outputSize = outputSize;
-            
-            const hiddenInit = Math.sqrt(2.0 / (inputSize + hiddenSize));
-            const outputInit = Math.sqrt(2.0 / (hiddenSize + outputSize));
-            
-            this.W1 = Matrix.random(inputSize, hiddenSize, hiddenInit);
-            this.b1 = Matrix.zeros(1, hiddenSize);
-            this.W2 = Matrix.random(hiddenSize, outputSize, outputInit);
-            this.b2 = Matrix.zeros(1, outputSize);
-            
-            this.mW1 = Matrix.zeros(inputSize, hiddenSize);
-            this.vW1 = Matrix.zeros(inputSize, hiddenSize);
-            this.mW2 = Matrix.zeros(hiddenSize, outputSize);
-            this.vW2 = Matrix.zeros(hiddenSize, outputSize);
-            this.mb1 = Matrix.zeros(1, hiddenSize);
-            this.vb1 = Matrix.zeros(1, hiddenSize);
-            this.mb2 = Matrix.zeros(1, outputSize);
-            this.vb2 = Matrix.zeros(1, outputSize);
-            this.step = 0;
-        }
-        
-        forward(inputArray) {
-            const input = new Matrix(1, this.inputSize, [inputArray]);
-            this.z1 = input.multiply(this.W1).add(this.b1);
-            this.a1 = this.z1.clone().apply(x => tanh(x));
-            this.z2 = this.a1.multiply(this.W2).add(this.b2);
-            this.a2 = this.z2.clone().apply(x => x);
-            return this.a2.toArray();
-        }
-        
-        train(inputArray, targetArray, lr = 0.01) {
-            this.step++;
-            const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
-            
-            const input = new Matrix(1, this.inputSize, [inputArray]);
-            this.z1 = input.multiply(this.W1).add(this.b1);
-            this.a1 = this.z1.clone().apply(x => tanh(x));
-            this.z2 = this.a1.multiply(this.W2).add(this.b2);
-            this.a2 = this.z2.clone().apply(x => x);
-            
-            const target = new Matrix(1, this.outputSize, [targetArray]);
-            const outputError = this.a2.subtract(target);
-            const dW2 = this.a1.transpose().multiply(outputError);
-            const db2 = outputError.clone();
-            
-            const hiddenError = outputError.multiply(this.W2.transpose());
-            const dActivation = this.z1.clone().apply(x => tanhDerivative(tanh(x)));
-            const hiddenDelta = hiddenError.multiply(dActivation);
-            const dW1 = input.transpose().multiply(hiddenDelta);
-            const db1 = hiddenDelta;
-            
-            const adamUpdate = (param, grad, m, v) => {
-                for (let i = 0; i < param.rows; i++) {
-                    for (let j = 0; j < param.cols; j++) {
-                        const g = grad.data[i][j];
-                        m.data[i][j] = beta1 * m.data[i][j] + (1 - beta1) * g;
-                        v.data[i][j] = beta2 * v.data[i][j] + (1 - beta2) * g * g;
-                        const mHat = m.data[i][j] / (1 - Math.pow(beta1, this.step));
-                        const vHat = v.data[i][j] / (1 - Math.pow(beta2, this.step));
-                        param.data[i][j] -= lr * mHat / (Math.sqrt(vHat) + eps);
-                    }
-                }
-            };
-            
-            adamUpdate(this.W1, dW1, this.mW1, this.vW1);
-            adamUpdate(this.b1, db1, this.mb1, this.vb1);
-            adamUpdate(this.W2, dW2, this.mW2, this.vW2);
-            adamUpdate(this.b2, db2, this.mb2, this.vb2);
-            
-            return outputError.toArray().reduce((s, v) => s + v*v, 0) / this.outputSize;
-        }
-        
-        getWeightCount() {
-            return (this.inputSize * this.hiddenSize) + this.hiddenSize + 
-                   (this.hiddenSize * this.outputSize) + this.outputSize;
-        }
-    }
-    
-    // ===== LSTM MEMORY CELL =====
-    class LSTMCell {
-        constructor(inputSize, hiddenSize) {
-            this.inputSize = inputSize;
-            this.hiddenSize = hiddenSize;
-            const init = Math.sqrt(2.0 / (inputSize + hiddenSize));
-            
-            this.Wf = Matrix.random(inputSize, hiddenSize, init);
-            this.Wi = Matrix.random(inputSize, hiddenSize, init);
-            this.Wc = Matrix.random(inputSize, hiddenSize, init);
-            this.Wo = Matrix.random(inputSize, hiddenSize, init);
-            this.Uf = Matrix.random(hiddenSize, hiddenSize, init);
-            this.Ui = Matrix.random(hiddenSize, hiddenSize, init);
-            this.Uc = Matrix.random(hiddenSize, hiddenSize, init);
-            this.Uo = Matrix.random(hiddenSize, hiddenSize, init);
-            this.bf = Matrix.zeros(1, hiddenSize);
-            this.bi = Matrix.zeros(1, hiddenSize);
-            this.bc = Matrix.zeros(1, hiddenSize);
-            this.bo = Matrix.zeros(1, hiddenSize);
-            
-            this.h = Matrix.zeros(1, hiddenSize);
-            this.c = Matrix.zeros(1, hiddenSize);
-        }
-        
-        forward(xArray) {
-            const x = new Matrix(1, this.inputSize, [xArray]);
-            const f = x.multiply(this.Wf).add(this.h.multiply(this.Uf)).add(this.bf).apply(x => sigmoid(x));
-            const i = x.multiply(this.Wi).add(this.h.multiply(this.Ui)).add(this.bi).apply(x => sigmoid(x));
-            const c_tilde = x.multiply(this.Wc).add(this.h.multiply(this.Uc)).add(this.bc).apply(x => tanh(x));
-            const o = x.multiply(this.Wo).add(this.h.multiply(this.Uo)).add(this.bo).apply(x => sigmoid(x));
-            this.c = f.multiply(this.c).add(i.multiply(c_tilde));
-            this.h = o.multiply(this.c.clone().apply(x => tanh(x)));
-            return this.h.toArray();
-        }
-        
-        getMemory() { return this.h.toArray(); }
-    }
-    
-    // ===== ROLES =====
-    const ROLE_MAFIA = 0, ROLE_VILLAGER = 1;
-    const roleNames = ['MAFIA', 'VILLAGER'];
-    
-    // ===== NEURAL AGENT =====
-    class NeuralAgent {
-        constructor(id, name, role, aggression, loyalty, brain, memoryCell) {
-            this.id = id;
-            this.name = name;
-            this.role = role;
-            this.alive = true;
-            this.aggression = aggression;
-            this.loyalty = loyalty;
-            this.totalReward = 0;
-            this.brain = brain;
-            this.memory = memoryCell;
-            this.probMafia = new Map();
-        }
-        
-        getState(targetIdx, probMafia, avgBelief) {
-            return [
-                Math.random(), Math.random(), Math.random(),
-                probMafia, 0,
-                Math.random(), (this.loyalty + 1) / 2, Math.random(),
-                avgBelief, this.role === ROLE_MAFIA ? 1 : 0
-            ];
-        }
-        
-        decide(candidates, probMap) {
-            if (candidates.length === 0) return -1;
-            let best = candidates[0], bestVal = -Infinity;
-            let avgBelief = 0;
-            for (const c of candidates) avgBelief += probMap.get(c) || 0;
-            avgBelief /= candidates.length;
-            
-            for (const c of candidates) {
-                const prob = probMap.get(c) || 0;
-                const state = this.getState(c, prob, avgBelief);
-                const q = this.brain.forward(state);
-                if (q[0] > bestVal) { bestVal = q[0]; best = c; }
-            }
-            return Math.random() < 0.1 ? candidates[Math.floor(Math.random() * candidates.length)] : best;
-        }
-        
-        updateMemory(context) { return this.memory.forward(context); }
-    }
-    
-    // ===== GAME ENGINE =====
-    class NeuralGame {
-        constructor(agentCount, globalBrain) {
-            this.agents = [];
-            this.cycle = 0;
-            this.gameActive = true;
-            this.winner = null;
-            this.createAgents(agentCount, globalBrain);
-        }
-        
-        createAgents(n, globalBrain) {
-            const mafiaCount = Math.max(1, Math.floor(n / 6));
-            const pool = [];
-            for (let i = 0; i < mafiaCount; i++) pool.push(ROLE_MAFIA);
-            while (pool.length < n) pool.push(ROLE_VILLAGER);
-            for (let i = pool.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [pool[i], pool[j]] = [pool[j], pool[i]];
-            }
-            
-            for (let i = 0; i < n; i++) {
-                const role = pool[i];
-                const aggression = [0.7, 0.2][role] + [0.3, 0.4][role] * Math.random();
-                const loyalty = [0.4, 0.4][role] + [0.3, 0.4][role] * Math.random();
-                const agentBrain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-                agentBrain.W1 = globalBrain.W1.clone();
-                agentBrain.W2 = globalBrain.W2.clone();
-                agentBrain.b1 = globalBrain.b1.clone();
-                agentBrain.b2 = globalBrain.b2.clone();
-                const memory = new LSTMCell(INPUT_SIZE, MEMORY_SIZE);
-                this.agents.push(new NeuralAgent(i, `AGENT_${i.toString().padStart(3, '0')}`, role, aggression, loyalty, agentBrain, memory));
-                
-                for (let j = 0; j < n; j++)
-                    if (i !== j) this.agents[i].probMafia.set(j, mafiaCount / (n - 1));
-            }
-        }
-        
-        async runCycle() {
-            this.cycle++;
-            const nightLog = [], dayLog = [];
-            
-            let killed = -1;
-            for (let i = 0; i < this.agents.length; i++) {
-                if (this.agents[i].alive && this.agents[i].role === ROLE_MAFIA) {
-                    const candidates = [];
-                    for (let j = 0; j < this.agents.length; j++)
-                        if (this.agents[j].alive && j !== i) candidates.push(j);
-                    if (candidates.length) killed = candidates[Math.floor(Math.random() * candidates.length)];
-                    break;
+            if (msg.type === 'cycle_complete') {
+                updateUI(msg.data);
+                if (msg.winner) {
+                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!`);
                 }
             }
-            if (killed !== -1) { 
-                this.agents[killed].alive = false; 
-                nightLog.push(`TARGET_ELIMINATED: ${this.agents[killed].name} [${roleNames[this.agents[killed].role]}]`);
-            } else nightLog.push(`NO_CASUALTIES_REPORTED`);
-            
-            let win = this.checkWin();
-            if (win.finished) { 
-                this.gameActive = false; 
-                this.winner = win.winner; 
-                return { night: nightLog, day: dayLog, gameOver: true, winner: this.winner }; 
+            if (msg.type === 'nudge_ack') {
+                console.log(`Nudge: ${msg.agentId} ${msg.trait} -> ${msg.newValue.toFixed(3)}`);
             }
-            
-            const votes = new Array(this.agents.length).fill(-1);
-            const voteCount = new Array(this.agents.length).fill(0);
-            
-            for (let i = 0; i < this.agents.length; i++) {
-                if (this.agents[i].alive) {
-                    const candidates = [];
-                    for (let j = 0; j < this.agents.length; j++)
-                        if (this.agents[j].alive && j !== i) candidates.push(j);
-                    const target = this.agents[i].decide(candidates, this.agents[i].probMafia);
-                    votes[i] = target;
-                    if (target !== -1) { 
-                        voteCount[target]++; 
-                        if (dayLog.length < 15) dayLog.push(`${this.agents[i].name} → ${this.agents[target].name}`);
-                    }
-                }
-            }
-            
-            let lynched = -1, maxVotes = 0;
-            for (let i = 0; i < this.agents.length; i++)
-                if (this.agents[i].alive && voteCount[i] > maxVotes) { 
-                    maxVotes = voteCount[i]; 
-                    lynched = i; 
-                }
-            
-            const aliveCount = this.agents.filter(a => a.alive).length;
-            const majority = Math.ceil(aliveCount / 2);
-            
-            if (lynched !== -1 && maxVotes >= majority && maxVotes > 0) {
-                const wasMafia = this.agents[lynched].role === ROLE_MAFIA;
-                this.agents[lynched].alive = false;
-                for (let i = 0; i < this.agents.length; i++)
-                    if (this.agents[i].alive && votes[i] === lynched)
-                        this.agents[i].totalReward += wasMafia ? 1.0 : -0.3;
-                dayLog.push(`═══ LYNCHED: ${this.agents[lynched].name} [${roleNames[this.agents[lynched].role]}] ${wasMafia ? '✓ MAFIA_TERMINATED' : '✗ TOWN_LOSS'}`);
-            } else if (maxVotes > 0) {
-                dayLog.push(`NO_CONSENSUS: NEED ${majority}, GOT ${maxVotes}`);
-            } else {
-                dayLog.push(`ABSTAIN: NO_VOTES_CAST`);
-            }
-            
-            for (const a of this.agents) 
-                if (a.alive) a.updateMemory(Array(INPUT_SIZE).fill(0).map(() => Math.random()));
-            
-            win = this.checkWin();
-            if (win.finished) { 
-                this.gameActive = false; 
-                this.winner = win.winner; 
-                return { night: nightLog, day: dayLog, gameOver: true, winner: this.winner }; 
-            }
-            return { night: nightLog, day: dayLog, gameOver: false, winner: null };
-        }
+        };
         
-        checkWin() {
-            let mafia = 0, town = 0;
-            for (const a of this.agents) 
-                if (a.alive) a.role === ROLE_MAFIA ? mafia++ : town++;
-            if (mafia === 0) return { finished: true, winner: "TOWN" };
-            if (mafia >= town) return { finished: true, winner: "MAFIA" };
-            return { finished: false, winner: null };
-        }
+        ws.onclose = () => {
+            document.getElementById('status').innerHTML = '<span class="disconnected">●</span> Disconnected - reconnecting...';
+            setTimeout(connect, 3000);
+        };
         
-        getGameState() {
-            return {
-                cycle: this.cycle,
-                agents: this.agents.map(a => ({ 
-                    id: a.id, name: a.name, role: roleNames[a.role], alive: a.alive, 
-                    memory: a.memory.getMemory().map(m => m.toFixed(2)), 
-                    reward: a.totalReward.toFixed(2) 
-                })),
-                aliveCount: this.agents.filter(a => a.alive).length,
-                totalAgents: this.agents.length
-            };
-        }
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+        };
     }
     
-    // ===== TRAINING WITH VISIBLE PROGRESS =====
-    async function trainNetwork(epochs, progressCb) {
-        const brain = new NeuralNetwork(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
-        for (let ep = 0; ep < epochs; ep++) {
-            let epochLoss = 0;
-            for (let s = 0; s < 20; s++) {
-                const state = Array(INPUT_SIZE).fill(0).map(() => Math.random());
-                const target = Array(OUTPUT_SIZE).fill(0);
-                target[0] = Math.random();
-                const loss = brain.train(state, target, 0.01);
-                epochLoss += loss;
-            }
-            epochLoss /= 20;
-            if (progressCb) progressCb(ep, epochs, epochLoss);
-            await new Promise(r => setTimeout(r, 10)); // Small delay for UI update
-        }
-        return brain;
-    }
-    
-    // ===== UI =====
-    let game = null, globalBrain = null, autoInterval = null;
-    
-    function addLog(message, type = 'system') {
-        const logDiv = document.createElement('div');
-        logDiv.className = `log-entry ${type}`;
-        logDiv.innerHTML = message;
-        const eventLog = document.getElementById('eventLog');
-        eventLog.appendChild(logDiv);
-        eventLog.scrollTop = eventLog.scrollHeight;
-        while (eventLog.children.length > 100) eventLog.removeChild(eventLog.firstChild);
-    }
-    
-    function updateUI() {
-        if (!game) return;
-        const s = game.getGameState();
-        let mafia = 0, town = 0;
-        s.agents.forEach(a => { if (a.alive) a.role === 'MAFIA' ? mafia++ : town++; });
-        document.getElementById('mafiaCount').innerHTML = mafia.toString().padStart(3, '0');
-        document.getElementById('townCount').innerHTML = town.toString().padStart(3, '0');
-        document.getElementById('cycleCount').innerHTML = s.cycle.toString().padStart(6, '0');
-        document.getElementById('agentCountDisplay').innerHTML = `${s.aliveCount.toString().padStart(3, '0')}/${s.totalAgents.toString().padStart(3, '0')}`;
+    function updateUI(state) {
+        currentGameId = state.gameId;
+        agents = state.agents;
         
-        const tbody = document.getElementById('agentTableBody');
+        document.getElementById('cycle').textContent = state.cycle;
+        document.getElementById('mafiaCount').textContent = state.mafiaAlive;
+        document.getElementById('townCount').textContent = state.townAlive;
+        document.getElementById('totalCount').textContent = state.agents.length;
+        
+        const tbody = document.getElementById('agentTable');
         tbody.innerHTML = '';
-        s.agents.slice(0, 50).forEach(a => {
+        
+        const nudgeSelect = document.getElementById('nudgeAgentSelect');
+        nudgeSelect.innerHTML = '';
+        
+        for (const agent of state.agents) {
             const row = tbody.insertRow();
-            row.innerHTML = `<td>${a.id.toString().padStart(3, '0')}</td>
-                <td>${a.name}</td>
-                <td style="color:${a.role==='MAFIA'?'#ff4444':'#00ff41'}">${a.role}</td>
-                <td class="${a.alive ? 'status-alive' : 'status-dead'}">${a.alive ? 'ACTIVE' : 'TERMINATED'}</td>
-                <td style="font-family:monospace;font-size:0.7rem">[${a.memory.join(',')}]</td>
-                <td>${a.reward}</td>`;
-        });
-    }
-    
-    function drawNeuralViz() {
-        const inputGrid = document.getElementById('inputViz');
-        const hiddenGrid = document.getElementById('hiddenViz');
-        const outputGrid = document.getElementById('outputViz');
-        
-        inputGrid.innerHTML = '';
-        hiddenGrid.innerHTML = '';
-        outputGrid.innerHTML = '';
-        
-        for (let i = 0; i < INPUT_SIZE; i++) {
-            const div = document.createElement('div');
-            div.className = 'neuron-pixel';
-            inputGrid.appendChild(div);
-        }
-        
-        for (let i = 0; i < HIDDEN_SIZE; i++) {
-            const div = document.createElement('div');
-            div.className = 'neuron-pixel';
-            hiddenGrid.appendChild(div);
-        }
-        
-        for (let i = 0; i < OUTPUT_SIZE; i++) {
-            const div = document.createElement('div');
-            div.className = 'neuron-pixel';
-            outputGrid.appendChild(div);
+            row.className = agent.alive ? '' : 'dead';
+            
+            row.insertCell(0).textContent = agent.id;
+            row.insertCell(1).textContent = agent.name;
+            row.insertCell(2).innerHTML = `<span class="${agent.role === 0 ? 'mafia' : 'town'}">${agent.roleName}</span>`;
+            
+            row.insertCell(3).innerHTML = renderTraitBar(agent.aggression);
+            row.insertCell(4).innerHTML = renderTraitBar(agent.loyalty);
+            row.insertCell(5).innerHTML = renderTraitBar(agent.paranoia);
+            row.insertCell(6).innerHTML = renderTraitBar(agent.deceit);
+            row.insertCell(7).innerHTML = agent.totalReward.toFixed(2);
+            
+            const nudgeCell = row.insertCell(8);
+            const nudgeBtn = document.createElement('button');
+            nudgeBtn.textContent = 'Nudge';
+            nudgeBtn.style.fontSize = '11px';
+            nudgeBtn.style.padding = '2px 5px';
+            nudgeBtn.onclick = () => {
+                document.getElementById('nudgeAgentSelect').value = agent.id;
+            };
+            nudgeCell.appendChild(nudgeBtn);
+            
+            const option = document.createElement('option');
+            option.value = agent.id;
+            option.textContent = `${agent.id}: ${agent.name} (${agent.roleName})`;
+            nudgeSelect.appendChild(option);
         }
     }
     
-    async function showLoading() {
-        const loadProgress = document.getElementById('loadProgress');
-        const loadStatus = document.getElementById('loadStatus');
-        
-        const steps = ['LOADER READY', 'SHARED MEMORY OK', 'EDGEMAFIA ENGINE LOADED', 'GRAPHENE INTERFACE LOADED', 'NEURAL NETWORKS INITIALISED', 'WAITING FOR USER INPUT'];
-        
-        for (let i = 0; i < steps.length; i++) {
-            await new Promise(r => setTimeout(r, 400));
-            loadProgress.style.width = `${(i + 1) * (100 / steps.length)}%`;
-            loadStatus.innerHTML = steps[i];
-        }
-        
-        await new Promise(r => setTimeout(r, 500));
-        document.getElementById('loadingScreen').style.display = 'none';
+    function renderTraitBar(value) {
+        const percent = ((value + 1) / 2) * 100;
+        const colorClass = value >= 0 ? 'positive' : 'negative';
+        return `
+            <div class="trait-bar">
+                <div class="trait-fill ${colorClass}" style="width: ${percent}%"></div>
+            </div>
+            <span class="trait-value">${value.toFixed(2)}</span>
+        `;
     }
     
-    // TRAIN BUTTON - WITH VISIBLE PROGRESS
-    document.getElementById('trainBtn').onclick = async () => {
-        const epochs = parseInt(document.getElementById('trainCycles').value);
-        const panel = document.getElementById('trainingPanel');
-        const prog = document.getElementById('trainProgress');
-        const percentDiv = document.getElementById('trainPercent');
-        const statusDiv = document.getElementById('trainStatus');
-        const lossDiv = document.getElementById('trainLoss');
-        
-        panel.style.display = 'block';
-        document.getElementById('sysStatus').innerHTML = 'TRAINING';
-        
-        // Animate panel to draw attention
-        panel.style.border = '2px solid #ffaa44';
-        panel.style.boxShadow = '0 0 20px #ffaa44';
-        
-        globalBrain = await trainNetwork(epochs, (current, total, loss) => {
-            const percent = ((current + 1) / total) * 100;
-            prog.style.width = `${percent}%`;
-            percentDiv.innerHTML = `${Math.floor(percent)}%`;
-            statusDiv.innerHTML = `EPOCH ${current + 1} / ${total}`;
-            lossDiv.innerHTML = `LOSS: ${loss.toFixed(6)}`;
-        });
-        
-        statusDiv.innerHTML = `✓ TRAINING COMPLETE! ${epochs} EPOCHS PROCESSED`;
-        lossDiv.innerHTML = `FINAL LOSS: ${(0.01 + Math.random() * 0.05).toFixed(6)}`;
-        document.getElementById('sysStatus').innerHTML = 'READY';
-        document.getElementById('weightCount').innerHTML = `${globalBrain.getWeightCount()}`;
-        
-        setTimeout(() => {
-            panel.style.border = '2px solid #00ff41';
-            panel.style.boxShadow = 'none';
-        }, 1000);
-        
-        addLog(`> NEURAL_NETWORK_TRAINED: ${epochs} EPOCHS | WEIGHTS: ${globalBrain.getWeightCount()}`, 'system');
-    };
-    
-    document.getElementById('startBtn').onclick = async () => {
-        let cnt = parseInt(document.getElementById('agentCount').value);
-        if (cnt < 2) cnt = 2;
-        if (cnt > 100) cnt = 100;
-        
-        if (!globalBrain) { 
-            addLog(`> ERROR: NEURAL_NETWORK_NOT_TRAINED - PLEASE TRAIN FIRST`, 'system');
-            return;
+    function nextCycle() {
+        if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
+            ws.send(JSON.stringify({ type: 'next_cycle' }));
         }
-        
-        game = new NeuralGame(cnt, globalBrain);
-        document.getElementById('setupPanel').style.display = 'none';
-        document.getElementById('gamePanel').style.display = 'block';
-        
-        updateUI();
-        addLog(`> GAME_INITIALISED: ${cnt} AGENTS DEPLOYED`, 'system');
-        addLog(`> MAFIA_COUNT: ${Math.max(1, Math.floor(cnt/6))} | TOWN_COUNT: ${cnt - Math.max(1, Math.floor(cnt/6))}`, 'system');
-        addLog(`> NEURAL_AI: ACTIVE | LSTM_MEMORY: ENABLED`, 'system');
-    };
+    }
     
-    document.getElementById('nextCycleBtn').onclick = async () => {
-        if (game && game.gameActive) {
-            const r = await game.runCycle();
-            r.night.forEach(msg => addLog(msg, 'night'));
-            r.day.slice(0, 10).forEach(msg => addLog(msg, 'day'));
-            if (r.gameOver) {
-                addLog(`═══════════════════════════════════════════════════════════`, 'system');
-                addLog(`🏆 GAME_OVER: ${r.winner} VICTORY 🏆`, 'system');
-                addLog(`═══════════════════════════════════════════════════════════`, 'system');
+    function nudgeAgent(agentId, trait, delta) {
+        if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
+            ws.send(JSON.stringify({ type: 'nudge', agentId, trait, delta }));
+        }
+    }
+    
+    function newGame() {
+        const n = prompt('Number of agents (6-100):', '20');
+        if (n && parseInt(n) >= 6 && parseInt(n) <= 100) {
+            const gameId = `game_${Date.now()}`;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'join_game', gameId, createNew: true, n: parseInt(n) }));
             }
-            updateUI();
         }
-    };
+    }
     
-    document.getElementById('autoPlayBtn').onclick = async () => {
-        if (autoInterval) {
-            clearInterval(autoInterval);
-            autoInterval = null;
-            document.getElementById('autoPlayBtn').innerHTML = '[ AUTO PLAY ]';
-        } else {
-            document.getElementById('autoPlayBtn').innerHTML = '[ STOP ]';
-            autoInterval = setInterval(async () => {
-                if (!game || !game.gameActive) {
-                    clearInterval(autoInterval);
-                    autoInterval = null;
-                    document.getElementById('autoPlayBtn').innerHTML = '[ AUTO PLAY ]';
-                } else {
-                    const r = await game.runCycle();
-                    r.night.forEach(msg => addLog(msg, 'night'));
-                    r.day.slice(0, 5).forEach(msg => addLog(msg, 'day'));
-                    if (r.gameOver) {
-                        addLog(`🏆 GAME_OVER: ${r.winner} VICTORY 🏆`, 'system');
-                        clearInterval(autoInterval);
-                        autoInterval = null;
-                        document.getElementById('autoPlayBtn').innerHTML = '[ AUTO PLAY ]';
-                    }
-                    updateUI();
+    let gamepadInterval = null;
+    let lastA = false;
+    let lastX = false;
+    
+    function pollGamepad() {
+        const gamepads = navigator.getGamepads();
+        const gp = gamepads[0];
+        if (gp && gp.buttons) {
+            const aPressed = gp.buttons[0].pressed;
+            if (aPressed && !lastA) {
+                nextCycle();
+            }
+            lastA = aPressed;
+            
+            const xPressed = gp.buttons[2].pressed;
+            if (xPressed && !lastX) {
+                const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
+                const trait = document.getElementById('nudgeTraitSelect').value;
+                if (!isNaN(agentId)) {
+                    nudgeAgent(agentId, trait, 0.1);
                 }
-            }, 1000);
+            }
+            lastX = xPressed;
         }
+    }
+    
+    document.getElementById('nextCycleBtn').onclick = nextCycle;
+    document.getElementById('newGameBtn').onclick = newGame;
+    document.getElementById('nudgeUpBtn').onclick = () => {
+        const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
+        const trait = document.getElementById('nudgeTraitSelect').value;
+        if (!isNaN(agentId)) nudgeAgent(agentId, trait, 0.1);
+    };
+    document.getElementById('nudgeDownBtn').onclick = () => {
+        const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
+        const trait = document.getElementById('nudgeTraitSelect').value;
+        if (!isNaN(agentId)) nudgeAgent(agentId, trait, -0.1);
     };
     
-    document.getElementById('resetBtn').onclick = () => {
-        if (autoInterval) { clearInterval(autoInterval); autoInterval = null; }
-        document.getElementById('setupPanel').style.display = 'block';
-        document.getElementById('gamePanel').style.display = 'none';
-        game = null;
-        document.getElementById('autoPlayBtn').innerHTML = '[ AUTO PLAY ]';
-    };
-    
-    // Initialize
-    drawNeuralViz();
-    document.getElementById('weightCount').innerHTML = '0';
-    
-    showLoading().then(() => {
-        addLog(`> EDGEMAFIA_100K_NEURAL_AI_READY`, 'system');
-        addLog(`> ARCHITECTURE: ${INPUT_SIZE}→${HIDDEN_SIZE}→${OUTPUT_SIZE} | LSTM_MEMORY: ${MEMORY_SIZE}D`, 'system');
-        addLog(`> INSTRUCTIONS: 1) TRAIN NETWORK → 2) INITIALISE GAME → 3) NEXT CYCLE`, 'system');
-        addLog(`> TRAINING_VISIBLE: PROGRESS_BAR + PERCENT + LOSS_VALUE`, 'system');
+    window.addEventListener('gamepadconnected', (e) => {
+        console.log('Gamepad connected:', e.gamepad.id);
+        if (!gamepadInterval) {
+            gamepadInterval = setInterval(pollGamepad, 100);
+        }
     });
+    
+    window.addEventListener('gamepaddisconnected', (e) => {
+        console.log('Gamepad disconnected');
+        if (gamepadInterval && !navigator.getGamepads().some(g => g)) {
+            clearInterval(gamepadInterval);
+            gamepadInterval = null;
+        }
+    });
+    
+    connect();
 </script>
 </body>
 </html>
