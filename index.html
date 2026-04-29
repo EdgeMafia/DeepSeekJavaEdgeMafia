@@ -145,6 +145,19 @@
             font-family: monospace;
         }
         
+        .agent-count-badge {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: #000;
+            border: 1px solid #333;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: #666;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -210,10 +223,12 @@
     <span class="disconnected">●</span> Disconnected
 </div>
 <div class="game-id-badge" id="gameIdBadge">Game: ---</div>
+<div class="agent-count-badge" id="agentCountBadge">Agents: ---</div>
 
 <script>
     let ws = null;
     let currentGameId = null;
+    let currentAgentCount = 20;
     let agents = [];
     
     // Generate unique session ID for this player
@@ -221,6 +236,25 @@
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
         return `game_${timestamp}_${random}`;
+    }
+    
+    // Prompt for agent count (called on first load and new game)
+    function promptAgentCount() {
+        let input = prompt('Number of AI agents per game (6-100):', '20');
+        let count = parseInt(input);
+        
+        // Validate input
+        if (isNaN(count)) {
+            count = 20;
+        } else if (count < 6) {
+            alert('Minimum 6 agents. Using 6.');
+            count = 6;
+        } else if (count > 100) {
+            alert('Maximum 100 agents. Using 100.');
+            count = 100;
+        }
+        
+        return count;
     }
     
     function connect() {
@@ -233,17 +267,21 @@
         ws.onopen = () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
             
+            // PROMPT FOR AGENT COUNT ON FIRST LOAD
+            currentAgentCount = promptAgentCount();
+            document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
+            
             // Generate unique game ID for this player
             const uniqueGameId = generateGameId();
             currentGameId = uniqueGameId;
             document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
             
-            console.log('Creating private game with ID:', uniqueGameId);
+            console.log(`Creating private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
                 type: 'join_game', 
                 gameId: uniqueGameId, 
                 createNew: true, 
-                n: 20 
+                n: currentAgentCount
             }));
         };
         
@@ -255,7 +293,7 @@
             if (msg.type === 'cycle_complete') {
                 updateUI(msg.data);
                 if (msg.winner) {
-                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!`);
+                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!\n\nClick NEW GAME to start another simulation.`);
                 }
             }
             if (msg.type === 'nudge_ack') {
@@ -345,20 +383,27 @@
     }
     
     function newGame() {
-        const n = prompt('Number of agents (6-100):', '20');
-        if (n && parseInt(n) >= 6 && parseInt(n) <= 100) {
-            const uniqueGameId = generateGameId();
-            currentGameId = uniqueGameId;
-            document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
-            
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ 
-                    type: 'join_game', 
-                    gameId: uniqueGameId, 
-                    createNew: true, 
-                    n: parseInt(n) 
-                }));
-            }
+        // PROMPT FOR AGENT COUNT ON NEW GAME
+        const newAgentCount = promptAgentCount();
+        currentAgentCount = newAgentCount;
+        document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
+        
+        const uniqueGameId = generateGameId();
+        currentGameId = uniqueGameId;
+        document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log(`Creating NEW private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
+            ws.send(JSON.stringify({ 
+                type: 'join_game', 
+                gameId: uniqueGameId, 
+                createNew: true, 
+                n: currentAgentCount
+            }));
+        } else {
+            console.warn('Cannot create new game - WebSocket not connected');
+            // Attempt to reconnect
+            connect();
         }
     }
     
@@ -416,6 +461,7 @@
         }
     });
     
+    // Start the application
     connect();
 </script>
 </body>
