@@ -21,7 +21,6 @@
             margin-bottom: 20px;
         }
         
-        /* NEW TITLE SECTION */
         .title-section {
             text-align: center;
             margin-bottom: 20px;
@@ -133,6 +132,19 @@
         .connected { color: #0f0; }
         .disconnected { color: #f00; }
         
+        .game-id-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #000;
+            border: 1px solid #333;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: #666;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -142,7 +154,6 @@
 <body>
 <div class="container">
     <div class="hud">
-        <!-- NEW TITLE SECTION -->
         <div class="title-section">
             <div class="main-title">EDGEMAFIA</div>
             <div class="subtitle">by Aston Walker</div>
@@ -198,14 +209,22 @@
 <div class="status" id="status">
     <span class="disconnected">●</span> Disconnected
 </div>
+<div class="game-id-badge" id="gameIdBadge">Game: ---</div>
 
 <script>
     let ws = null;
     let currentGameId = null;
     let agents = [];
     
+    // Generate unique session ID for this player
+    function generateGameId() {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        return `game_${timestamp}_${random}`;
+    }
+    
     function connect() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // Hardcoded Render backend URL
         const wsUrl = `wss://edgemafia-neural.onrender.com`;
         console.log('Connecting to WebSocket:', wsUrl);
         
@@ -213,7 +232,19 @@
         
         ws.onopen = () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
-            ws.send(JSON.stringify({ type: 'join_game', gameId: 'game_auto', createNew: true, n: 20 }));
+            
+            // Generate unique game ID for this player
+            const uniqueGameId = generateGameId();
+            currentGameId = uniqueGameId;
+            document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
+            
+            console.log('Creating private game with ID:', uniqueGameId);
+            ws.send(JSON.stringify({ 
+                type: 'join_game', 
+                gameId: uniqueGameId, 
+                createNew: true, 
+                n: 20 
+            }));
         };
         
         ws.onmessage = (event) => {
@@ -302,6 +333,8 @@
     function nextCycle() {
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
             ws.send(JSON.stringify({ type: 'next_cycle' }));
+        } else {
+            console.warn('Cannot send next_cycle - WebSocket not connected');
         }
     }
     
@@ -314,9 +347,17 @@
     function newGame() {
         const n = prompt('Number of agents (6-100):', '20');
         if (n && parseInt(n) >= 6 && parseInt(n) <= 100) {
-            const gameId = `game_${Date.now()}`;
+            const uniqueGameId = generateGameId();
+            currentGameId = uniqueGameId;
+            document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
+            
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'join_game', gameId, createNew: true, n: parseInt(n) }));
+                ws.send(JSON.stringify({ 
+                    type: 'join_game', 
+                    gameId: uniqueGameId, 
+                    createNew: true, 
+                    n: parseInt(n) 
+                }));
             }
         }
     }
