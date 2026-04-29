@@ -179,7 +179,8 @@
         // FIXED: Use the current hostname with correct WebSocket port/protocol
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // On Render, WebSocket connects to same host (no port needed)
-        const wsUrl = `${protocol}//${window.location.host}`;
+        // TO (correct - your Render backend):
+		const wsUrl = `wss://edgemafia-neural.onrender.com`;
         console.log('Connecting to WebSocket:', wsUrl);
         
         ws = new WebSocket(wsUrl);
