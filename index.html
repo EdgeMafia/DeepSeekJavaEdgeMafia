@@ -181,9 +181,8 @@
         // On Render, WebSocket connects to same host (no port needed)
         // TO (correct - your Render backend):
 		const wsUrl = `wss://edgemafia-neural.onrender.com`;
-        console.log('Connecting to WebSocket:', wsUrl);
-        
-        ws = new WebSocket(wsUrl);
+    console.log('Connecting to:', wsUrl);
+    ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
