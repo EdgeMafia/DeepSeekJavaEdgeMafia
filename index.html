@@ -165,26 +165,27 @@
             font-family: monospace;
         }
         
-        .game-over-badge {
+        .toast {
             position: fixed;
-            top: 10px;
+            bottom: 50px;
             left: 50%;
             transform: translateX(-50%);
-            background: #f00;
-            color: #fff;
-            padding: 5px 15px;
+            background: #0a0;
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-size: 12px;
             font-weight: bold;
-            border-radius: 20px;
             font-family: monospace;
-            animation: pulse 1s infinite;
-            pointer-events: none;
             z-index: 1000;
+            animation: fadeOut 2s ease forwards;
+            pointer-events: none;
         }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; background: #f00; }
-            50% { opacity: 0.7; background: #800; }
+        @keyframes fadeOut {
+            0% { opacity: 1; bottom: 50px; }
+            70% { opacity: 1; bottom: 60px; }
+            100% { opacity: 0; bottom: 70px; visibility: hidden; }
         }
     </style>
 </head>
@@ -248,7 +249,6 @@
 </div>
 <div class="game-id-badge" id="gameIdBadge">Game: ---</div>
 <div class="agent-count-badge" id="agentCountBadge">Agents: ---</div>
-<div id="gameOverBadge" style="display: none;" class="game-over-badge">🏆 GAME OVER 🏆</div>
 
 <script>
     let ws = null;
@@ -257,6 +257,7 @@
     let agents = [];
     let gameOver = false;
     let currentWinner = null;
+    let isResettingAfterWin = false;  // Prevent multiple reset loops
     
     // Generate unique session ID for this player
     function generateGameId() {
@@ -265,12 +266,20 @@
         return `game_${timestamp}_${random}`;
     }
     
+    // Show a temporary toast message
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+    
     // Prompt for agent count (called on first load and new game)
     function promptAgentCount() {
         let input = prompt('Number of AI agents per game (6-100):', '20');
         let count = parseInt(input);
         
-        // Validate input
         if (isNaN(count)) {
             count = 20;
         } else if (count < 6) {
@@ -284,41 +293,86 @@
         return count;
     }
     
-    // Update UI based on game over state
-    function setGameOverState(isGameOver, winner = null) {
-        gameOver = isGameOver;
-        currentWinner = winner;
+    // Start a brand new game (clears all state)
+    function startNewGame() {
+        if (isResettingAfterWin) return;
+        
+        // Generate fresh game ID
+        const newAgentCount = promptAgentCount();
+        if (newAgentCount === null) return;
+        
+        currentAgentCount = newAgentCount;
+        document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
+        
+        const uniqueGameId = generateGameId();
+        currentGameId = uniqueGameId;
+        document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
+        
+        // Reset game over flags
+        gameOver = false;
+        currentWinner = null;
+        
+        // Re-enable UI
         const nextBtn = document.getElementById('nextCycleBtn');
+        nextBtn.disabled = false;
+        nextBtn.style.opacity = '1';
+        nextBtn.title = 'Advance to next cycle';
+        
         const nudgeUpBtn = document.getElementById('nudgeUpBtn');
         const nudgeDownBtn = document.getElementById('nudgeDownBtn');
         const nudgeAgentSelect = document.getElementById('nudgeAgentSelect');
         const nudgeTraitSelect = document.getElementById('nudgeTraitSelect');
-        const gameOverBadge = document.getElementById('gameOverBadge');
+        nudgeUpBtn.disabled = false;
+        nudgeDownBtn.disabled = false;
+        nudgeAgentSelect.disabled = false;
+        nudgeTraitSelect.disabled = false;
         
-        if (isGameOver) {
-            nextBtn.disabled = true;
-            nextBtn.style.opacity = '0.5';
-            nextBtn.title = 'Game over - click NEW GAME';
-            nudgeUpBtn.disabled = true;
-            nudgeDownBtn.disabled = true;
-            nudgeAgentSelect.disabled = true;
-            nudgeTraitSelect.disabled = true;
-            gameOverBadge.style.display = 'block';
-            gameOverBadge.textContent = `🏆 GAME OVER - ${winner ? winner.toUpperCase() : 'UNKNOWN'} WINS! 🏆`;
+        showToast('Starting fresh game...');
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log(`Creating NEW private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
+            ws.send(JSON.stringify({ 
+                type: 'join_game', 
+                gameId: uniqueGameId, 
+                createNew: true, 
+                n: currentAgentCount
+            }));
         } else {
-            nextBtn.disabled = false;
-            nextBtn.style.opacity = '1';
-            nextBtn.title = 'Advance to next cycle';
-            nudgeUpBtn.disabled = false;
-            nudgeDownBtn.disabled = false;
-            nudgeAgentSelect.disabled = false;
-            nudgeTraitSelect.disabled = false;
-            gameOverBadge.style.display = 'none';
+            console.warn('Cannot create new game - WebSocket not connected, reconnecting...');
+            connect();
         }
     }
     
+    // Handle game over - show alert then automatically start new game when OK is pressed
+    function handleGameOver(winner) {
+        if (gameOver) return;  // Already handled
+        
+        gameOver = true;
+        currentWinner = winner;
+        
+        // Disable UI during game over state
+        const nextBtn = document.getElementById('nextCycleBtn');
+        nextBtn.disabled = true;
+        nextBtn.style.opacity = '0.5';
+        nextBtn.title = 'Game over - starting new game...';
+        
+        const nudgeUpBtn = document.getElementById('nudgeUpBtn');
+        const nudgeDownBtn = document.getElementById('nudgeDownBtn');
+        const nudgeAgentSelect = document.getElementById('nudgeAgentSelect');
+        const nudgeTraitSelect = document.getElementById('nudgeTraitSelect');
+        nudgeUpBtn.disabled = true;
+        nudgeDownBtn.disabled = true;
+        nudgeAgentSelect.disabled = true;
+        nudgeTraitSelect.disabled = true;
+        
+        // Show alert - when OK is pressed, start a new game automatically
+        alert(`GAME OVER! ${winner.toUpperCase()} WINS!\n\nClick OK to start a fresh game.`);
+        
+        // After OK is pressed, start a new game
+        startNewGame();
+    }
+    
     function connect() {
-        // Hardcoded Render backend URL
         const wsUrl = `wss://edgemafia-neural.onrender.com`;
         console.log('Connecting to WebSocket:', wsUrl);
         
@@ -327,17 +381,16 @@
         ws.onopen = () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
             
-            // PROMPT FOR AGENT COUNT ON FIRST LOAD
             currentAgentCount = promptAgentCount();
             document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
             
-            // Generate unique game ID for this player
             const uniqueGameId = generateGameId();
             currentGameId = uniqueGameId;
             document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
             
-            // Reset game over state
-            setGameOverState(false, null);
+            gameOver = false;
+            currentWinner = null;
+            isResettingAfterWin = false;
             
             console.log(`Creating private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
@@ -352,27 +405,21 @@
             const msg = JSON.parse(event.data);
             if (msg.type === 'state') {
                 updateUI(msg.data);
-                // Sync game over state from server
-                if (msg.data.gameOver) {
-                    setGameOverState(true, msg.data.winner);
+                if (msg.data.gameOver && !gameOver) {
+                    handleGameOver(msg.data.winner || 'unknown');
                 }
             }
             if (msg.type === 'cycle_complete') {
                 updateUI(msg.data);
-                if (msg.winner) {
-                    setGameOverState(true, msg.winner);
-                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!\n\nClick OK to acknowledge, then press NEW GAME to start another simulation.`);
-                } else {
-                    // Ensure button is enabled if game is not over
-                    if (!gameOver) {
-                        setGameOverState(false, null);
-                    }
+                if (msg.winner && !gameOver) {
+                    handleGameOver(msg.winner);
                 }
             }
             if (msg.type === 'nudge_ack') {
                 console.log(`Nudge: ${msg.agentId} ${msg.trait} -> ${msg.newValue.toFixed(3)}`);
+                showToast(`Nudged Agent ${msg.agentId}: ${msg.trait} → ${msg.newValue.toFixed(3)}`);
                 // Refresh state after nudge
-                if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
+                if (ws && ws.readyState === WebSocket.OPEN && currentGameId && !gameOver) {
                     ws.send(JSON.stringify({ type: 'join_game', gameId: currentGameId, loadExisting: true, n: currentAgentCount }));
                 }
             }
@@ -447,7 +494,8 @@
     
     function nextCycle() {
         if (gameOver) {
-            alert('Game is already over! Click NEW GAME to start a fresh simulation.');
+            showToast('Game over! Starting new game...');
+            startNewGame();
             return;
         }
         
@@ -456,14 +504,14 @@
             ws.send(JSON.stringify({ type: 'next_cycle' }));
         } else {
             console.warn('Cannot send next_cycle - WebSocket not connected');
-            alert('WebSocket disconnected. Reconnecting...');
+            showToast('WebSocket disconnected. Reconnecting...');
             connect();
         }
     }
     
     function nudgeAgent(agentId, trait, delta) {
         if (gameOver) {
-            alert('Game is over! Start a new game to nudge agents.');
+            showToast('Game is over! Start a new game to nudge agents.');
             return;
         }
         
@@ -471,35 +519,6 @@
             ws.send(JSON.stringify({ type: 'nudge', agentId, trait, delta }));
         } else {
             console.warn('Cannot send nudge - WebSocket not connected');
-        }
-    }
-    
-    function newGame() {
-        // PROMPT FOR AGENT COUNT ON NEW GAME
-        const newAgentCount = promptAgentCount();
-        if (newAgentCount === null) return;
-        
-        currentAgentCount = newAgentCount;
-        document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
-        
-        const uniqueGameId = generateGameId();
-        currentGameId = uniqueGameId;
-        document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
-        
-        // Reset game over state
-        setGameOverState(false, null);
-        
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            console.log(`Creating NEW private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
-            ws.send(JSON.stringify({ 
-                type: 'join_game', 
-                gameId: uniqueGameId, 
-                createNew: true, 
-                n: currentAgentCount
-            }));
-        } else {
-            console.warn('Cannot create new game - WebSocket not connected, reconnecting...');
-            connect();
         }
     }
     
@@ -530,7 +549,7 @@
     }
     
     document.getElementById('nextCycleBtn').onclick = nextCycle;
-    document.getElementById('newGameBtn').onclick = newGame;
+    document.getElementById('newGameBtn').onclick = () => startNewGame();
     document.getElementById('nudgeUpBtn').onclick = () => {
         const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
         const trait = document.getElementById('nudgeTraitSelect').value;
