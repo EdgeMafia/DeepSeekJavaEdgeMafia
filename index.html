@@ -62,6 +62,7 @@
         .agent-table {
             width: 100%;
             border-collapse: collapse;
+            margin-bottom: 20px;
         }
         .agent-table th, .agent-table td {
             padding: 8px;
@@ -126,6 +127,103 @@
             font-family: monospace;
         }
         
+        /* Social Network Graph Styles */
+        .graph-container {
+            background: #000;
+            border: 2px solid #0f0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .graph-title {
+            color: #0f0;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .graph-legend {
+            display: flex;
+            gap: 20px;
+            font-size: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .legend-color.mafia { background: #f00; }
+        .legend-color.town { background: #0f0; }
+        .legend-color.trust-high { background: #0f0; }
+        .legend-color.trust-low { background: #f00; }
+        .legend-color.trust-mid { background: #ff0; }
+        
+        svg {
+            background: #0a0a0a;
+            border-radius: 5px;
+            cursor: move;
+        }
+        
+        .node circle {
+            stroke: #fff;
+            stroke-width: 2px;
+            transition: r 0.2s;
+            cursor: pointer;
+        }
+        
+        .node circle:hover {
+            stroke-width: 3px;
+            filter: brightness(1.2);
+        }
+        
+        .node text {
+            fill: #0f0;
+            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            pointer-events: none;
+            text-shadow: 0 0 2px #000;
+        }
+        
+        .link {
+            stroke-opacity: 0.6;
+            transition: stroke-width 0.2s;
+        }
+        
+        .link:hover {
+            stroke-opacity: 1;
+            stroke-width: 3px;
+        }
+        
+        .node-label {
+            font-size: 9px;
+            fill: #0f0;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: #000;
+            border: 1px solid #0f0;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #0f0;
+            border-radius: 5px;
+            pointer-events: none;
+            z-index: 1000;
+            white-space: nowrap;
+        }
+        
         .status {
             position: fixed;
             top: 10px;
@@ -188,6 +286,8 @@
             100% { opacity: 0; bottom: 70px; visibility: hidden; }
         }
     </style>
+    <!-- D3.js for graph visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -216,16 +316,34 @@
             </div>
         </div>
         
-        <table class="agent-table">
-            <thead>
-                <tr><th>ID</th><th>NAME</th><th>ROLE</th><th>AGG</th><th>LOY</th><th>PAR</th><th>DEC</th><th>REWARD</th><th>NUDGE</th></tr>
-            </thead>
-            <tbody id="agentTable"></tbody>
-        </table>
+        <div style="overflow-x: auto;">
+            <table class="agent-table">
+                <thead>
+                    <tr><th>ID</th><th>NAME</th><th>ROLE</th><th>AGG</th><th>LOY</th><th>PAR</th><th>DEC</th><th>REWARD</th><th>NUDGE</th></tr>
+                </thead>
+                <tbody id="agentTable"></tbody>
+            </table>
+        </div>
+        
+        <!-- SOCIAL NETWORK GRAPH SECTION -->
+        <div class="graph-container" id="graphContainer" style="display: none;">
+            <div class="graph-title">
+                <span>🔗 SOCIAL NETWORK GRAPH (Trust Relationships)</span>
+                <div class="graph-legend">
+                    <div class="legend-item"><div class="legend-color mafia"></div><span>Mafia</span></div>
+                    <div class="legend-item"><div class="legend-color town"></div><span>Town</span></div>
+                    <div class="legend-item"><div class="legend-color trust-high"></div><span>Trust &gt; 0.5</span></div>
+                    <div class="legend-item"><div class="legend-color trust-mid"></div><span>Trust 0 to 0.5</span></div>
+                    <div class="legend-item"><div class="legend-color trust-low"></div><span>Trust &lt; 0</span></div>
+                </div>
+            </div>
+            <div id="graph"></div>
+        </div>
         
         <div class="controls">
             <button id="nextCycleBtn">▶ NEXT CYCLE</button>
             <button id="newGameBtn">🔄 NEW GAME</button>
+            <button id="toggleGraphBtn" style="background:#333;">📊 SHOW GRAPH</button>
         </div>
         
         <div class="nudge-group">
@@ -239,7 +357,6 @@
             </select>
             <button id="nudgeUpBtn">+0.1</button>
             <button id="nudgeDownBtn">-0.1</button>
-            <span style="margin-left: 10px; font-size: 12px;">(Or use Gamepad: A=next, X=nudge+)</span>
         </div>
     </div>
 </div>
@@ -257,17 +374,21 @@
     let agents = [];
     let gameOver = false;
     let currentWinner = null;
-    let isResetting = false;  // Prevent multiple reset loops
-    let expectedNextGameId = null;  // Track expected new game ID to ignore old messages
+    let isResetting = false;
+    let expectedNextGameId = null;
     
-    // Generate unique session ID for this player
+    // Graph state
+    let graphVisible = false;
+    let svg = null;
+    let simulation = null;
+    let currentGraphData = { nodes: [], edges: [] };
+    
     function generateGameId() {
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
         return `game_${timestamp}_${random}`;
     }
     
-    // Show a temporary toast message
     function showToast(message) {
         const toast = document.createElement('div');
         toast.className = 'toast';
@@ -276,7 +397,6 @@
         setTimeout(() => toast.remove(), 2000);
     }
     
-    // Prompt for agent count (called on first load and new game)
     function promptAgentCount() {
         let input = prompt('Number of AI agents per game (6-100):', '20');
         let count = parseInt(input);
@@ -294,16 +414,185 @@
         return count;
     }
     
-    // Start a brand new game (clears all state)
-    function startNewGame() {
-        if (isResetting) {
-            console.log('Already resetting, ignoring duplicate call');
-            return;
+    // Initialize or update the social network graph
+    function updateGraph(trustMatrix) {
+        if (!graphVisible || !trustMatrix) return;
+        
+        const container = document.getElementById('graph');
+        const width = container.clientWidth || 1000;
+        const height = 500;
+        
+        // Filter dead nodes and ensure unique nodes
+        const aliveNodes = trustMatrix.nodes.filter(n => n.alive);
+        const nodeMap = new Map();
+        aliveNodes.forEach(n => nodeMap.set(n.id, n));
+        
+        // Filter edges where both ends are alive
+        const validEdges = trustMatrix.edges.filter(e => 
+            nodeMap.has(e.source) && nodeMap.has(e.target)
+        );
+        
+        currentGraphData = {
+            nodes: aliveNodes,
+            edges: validEdges
+        };
+        
+        if (currentGraphData.nodes.length === 0) return;
+        
+        // Clear previous graph
+        d3.select("#graph svg").remove();
+        
+        // Create new SVG
+        svg = d3.select("#graph")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("viewBox", [0, 0, width, height])
+            .style("background", "#0a0a0a");
+        
+        // Add zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 2])
+            .on("zoom", (event) => {
+                svg.selectAll(".zoom-group").attr("transform", event.transform);
+            });
+        
+        svg.call(zoom);
+        
+        const mainGroup = svg.append("g").attr("class", "zoom-group");
+        
+        // Create force simulation
+        simulation = d3.forceSimulation(currentGraphData.nodes)
+            .force("link", d3.forceLink(currentGraphData.edges).id(d => d.id).distance(120).strength(0.5))
+            .force("charge", d3.forceManyBody().strength(-200))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(30));
+        
+        // Draw edges (links)
+        const link = mainGroup.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(currentGraphData.edges)
+            .enter()
+            .append("line")
+            .attr("class", "link")
+            .attr("stroke", d => {
+                if (d.trust > 0.5) return "#0f0";
+                if (d.trust > 0) return "#ff0";
+                return "#f00";
+            })
+            .attr("stroke-width", d => Math.min(3, Math.abs(d.trust) * 3 + 1))
+            .attr("stroke-dasharray", d => d.trust < 0 ? "4,4" : "none");
+        
+        // Add tooltip on edges
+        link.append("title")
+            .text(d => `Trust: ${d.trust.toFixed(3)}\nLiking: ${d.liking.toFixed(3)}`);
+        
+        // Draw nodes
+        const node = mainGroup.append("g")
+            .attr("class", "nodes")
+            .selectAll("g")
+            .data(currentGraphData.nodes)
+            .enter()
+            .append("g")
+            .attr("class", "node")
+            .call(d3.drag()
+                .on("start", dragStarted)
+                .on("drag", dragged)
+                .on("end", dragEnded));
+        
+        // Node circles
+        node.append("circle")
+            .attr("r", d => d.role === 0 ? 14 : 10)
+            .attr("fill", d => d.role === 0 ? "#800" : "#080")
+            .attr("stroke", d => d.role === 0 ? "#f00" : "#0f0")
+            .attr("stroke-width", 2);
+        
+        // Node labels
+        node.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dy", -15)
+            .text(d => `${d.id}: ${d.name.substring(0, 8)}`)
+            .attr("fill", "#0f0")
+            .attr("font-size", "10px")
+            .attr("font-family", "monospace");
+        
+        // Small trait indicators below node
+        node.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dy", 22)
+            .html(d => `A:${d.aggression.toFixed(1)}`)
+            .attr("fill", "#888")
+            .attr("font-size", "8px");
+        
+        // Tooltip on nodes
+        node.append("title")
+            .text(d => `${d.name} (${d.roleName})
+Aggression: ${d.aggression.toFixed(3)}
+Loyalty: ${d.loyalty.toFixed(3)}
+Paranoia: ${d.paranoia.toFixed(3)}
+Deceit: ${d.deceit.toFixed(3)}`);
+        
+        // Update positions on simulation tick
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+            
+            node
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+        
+        // Drag functions
+        function dragStarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
         }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragEnded(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Add resize handler
+        window.addEventListener('resize', () => {
+            if (graphVisible) {
+                updateGraph(trustMatrix);
+            }
+        });
+    }
+    
+    function dragStarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+    
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+    
+    function dragEnded(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+    
+    async function startNewGame() {
+        if (isResetting) return;
         
         isResetting = true;
         
-        // Generate fresh game ID
         const newAgentCount = promptAgentCount();
         if (newAgentCount === null) {
             isResetting = false;
@@ -314,19 +603,16 @@
         document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
         
         const uniqueGameId = generateGameId();
-        expectedNextGameId = uniqueGameId;  // Set expected ID to filter messages
+        expectedNextGameId = uniqueGameId;
         currentGameId = uniqueGameId;
         document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
         
-        // Reset game over flags
         gameOver = false;
         currentWinner = null;
         
-        // Re-enable UI
         const nextBtn = document.getElementById('nextCycleBtn');
         nextBtn.disabled = false;
         nextBtn.style.opacity = '1';
-        nextBtn.title = 'Advance to next cycle';
         
         const nudgeUpBtn = document.getElementById('nudgeUpBtn');
         const nudgeDownBtn = document.getElementById('nudgeDownBtn');
@@ -340,7 +626,6 @@
         showToast('Starting fresh game...');
         
         if (ws && ws.readyState === WebSocket.OPEN) {
-            console.log(`Creating NEW private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
                 type: 'join_game', 
                 gameId: uniqueGameId, 
@@ -348,29 +633,24 @@
                 n: currentAgentCount
             }));
         } else {
-            console.warn('Cannot create new game - WebSocket not connected, reconnecting...');
             connect();
         }
         
-        // Reset the flag after a delay to allow the game to initialize
         setTimeout(() => {
             isResetting = false;
         }, 1000);
     }
     
-    // Handle game over - show alert then automatically start new game when OK is pressed
     function handleGameOver(winner) {
-        if (gameOver) return;  // Already handled
-        if (isResetting) return;  // Already resetting
+        if (gameOver) return;
+        if (isResetting) return;
         
         gameOver = true;
         currentWinner = winner;
         
-        // Disable UI during game over state
         const nextBtn = document.getElementById('nextCycleBtn');
         nextBtn.disabled = true;
         nextBtn.style.opacity = '0.5';
-        nextBtn.title = 'Game over - click OK to start new game';
         
         const nudgeUpBtn = document.getElementById('nudgeUpBtn');
         const nudgeDownBtn = document.getElementById('nudgeDownBtn');
@@ -381,21 +661,37 @@
         nudgeAgentSelect.disabled = true;
         nudgeTraitSelect.disabled = true;
         
-        // Show alert - when OK is pressed, start a new game automatically
         alert(`GAME OVER! ${winner.toUpperCase()} WINS!\n\nClick OK to start a fresh game.`);
         
-        // After OK is pressed, start a new game
         startNewGame();
     }
     
+    function toggleGraph() {
+        graphVisible = !graphVisible;
+        const container = document.getElementById('graphContainer');
+        const toggleBtn = document.getElementById('toggleGraphBtn');
+        
+        if (graphVisible) {
+            container.style.display = 'block';
+            toggleBtn.innerHTML = '📊 HIDE GRAPH';
+            toggleBtn.style.background = '#0a0';
+            // Trigger graph render on next state update
+            if (currentGraphData.nodes.length > 0) {
+                updateGraph(currentGraphData);
+            }
+        } else {
+            container.style.display = 'none';
+            toggleBtn.innerHTML = '📊 SHOW GRAPH';
+            toggleBtn.style.background = '#333';
+        }
+    }
+    
     function connect() {
-        // Close existing connection if any
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.close();
         }
         
         const wsUrl = `wss://edgemafia-neural.onrender.com`;
-        console.log('Connecting to WebSocket:', wsUrl);
         
         ws = new WebSocket(wsUrl);
         
@@ -414,7 +710,6 @@
             currentWinner = null;
             isResetting = false;
             
-            console.log(`Creating private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
                 type: 'join_game', 
                 gameId: uniqueGameId, 
@@ -426,32 +721,36 @@
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             
-            // IGNORE messages from old games after reset
             if (msg.data && msg.data.gameId && expectedNextGameId && msg.data.gameId !== expectedNextGameId) {
-                console.log(`Ignoring message from old game ${msg.data.gameId}, expecting ${expectedNextGameId}`);
                 return;
             }
             
             if (msg.type === 'state') {
-                // Only update UI if this is our current game
                 if (msg.data.gameId === currentGameId || !expectedNextGameId) {
                     updateUI(msg.data);
+                    // Update graph with trust matrix
+                    if (msg.data.trustMatrix && graphVisible) {
+                        updateGraph(msg.data.trustMatrix);
+                        currentGraphData = msg.data.trustMatrix;
+                    }
                     if (msg.data.gameOver && !gameOver && !isResetting) {
                         handleGameOver(msg.data.winner || 'unknown');
                     }
                 }
             }
             if (msg.type === 'cycle_complete') {
-                // Only process if this is our current game and not already resetting
                 if (msg.data.gameId === currentGameId && !isResetting) {
                     updateUI(msg.data);
+                    if (msg.data.trustMatrix && graphVisible) {
+                        updateGraph(msg.data.trustMatrix);
+                        currentGraphData = msg.data.trustMatrix;
+                    }
                     if (msg.winner && !gameOver) {
                         handleGameOver(msg.winner);
                     }
                 }
             }
             if (msg.type === 'nudge_ack') {
-                console.log(`Nudge: ${msg.agentId} ${msg.trait} -> ${msg.newValue.toFixed(3)}`);
                 showToast(`Nudged Agent ${msg.agentId}: ${msg.trait} → ${msg.newValue.toFixed(3)}`);
             }
         };
@@ -467,7 +766,6 @@
     }
     
     function updateUI(state) {
-        // Safety check - don't update UI if game IDs don't match during reset
         if (expectedNextGameId && state.gameId !== expectedNextGameId && state.gameId !== currentGameId) {
             return;
         }
@@ -541,10 +839,8 @@
         }
         
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
-            console.log('Requesting next cycle...');
             ws.send(JSON.stringify({ type: 'next_cycle' }));
         } else {
-            console.warn('Cannot send next_cycle - WebSocket not connected');
             showToast('WebSocket disconnected. Reconnecting...');
             connect();
         }
@@ -563,39 +859,13 @@
         
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
             ws.send(JSON.stringify({ type: 'nudge', agentId, trait, delta }));
-        } else {
-            console.warn('Cannot send nudge - WebSocket not connected');
         }
     }
     
-    let gamepadInterval = null;
-    let lastA = false;
-    let lastX = false;
-    
-    function pollGamepad() {
-        const gamepads = navigator.getGamepads();
-        const gp = gamepads[0];
-        if (gp && gp.buttons) {
-            const aPressed = gp.buttons[0].pressed;
-            if (aPressed && !lastA) {
-                nextCycle();
-            }
-            lastA = aPressed;
-            
-            const xPressed = gp.buttons[2].pressed;
-            if (xPressed && !lastX) {
-                const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
-                const trait = document.getElementById('nudgeTraitSelect').value;
-                if (!isNaN(agentId)) {
-                    nudgeAgent(agentId, trait, 0.1);
-                }
-            }
-            lastX = xPressed;
-        }
-    }
-    
+    // Event listeners
     document.getElementById('nextCycleBtn').onclick = nextCycle;
     document.getElementById('newGameBtn').onclick = () => startNewGame();
+    document.getElementById('toggleGraphBtn').onclick = toggleGraph;
     document.getElementById('nudgeUpBtn').onclick = () => {
         const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
         const trait = document.getElementById('nudgeTraitSelect').value;
@@ -607,22 +877,6 @@
         if (!isNaN(agentId)) nudgeAgent(agentId, trait, -0.1);
     };
     
-    window.addEventListener('gamepadconnected', (e) => {
-        console.log('Gamepad connected:', e.gamepad.id);
-        if (!gamepadInterval) {
-            gamepadInterval = setInterval(pollGamepad, 100);
-        }
-    });
-    
-    window.addEventListener('gamepaddisconnected', (e) => {
-        console.log('Gamepad disconnected');
-        if (gamepadInterval && !navigator.getGamepads().some(g => g)) {
-            clearInterval(gamepadInterval);
-            gamepadInterval = null;
-        }
-    });
-    
-    // Start the application
     connect();
 </script>
 </body>
