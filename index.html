@@ -127,9 +127,9 @@
             font-family: monospace;
         }
         
-        /* Social Network Graph Styles */
+        /* Canvas Graph Styles - SIMPLE AND RELIABLE */
         .graph-container {
-            background: #000;
+            background: #0a0a0a;
             border: 2px solid #0f0;
             border-radius: 10px;
             padding: 15px;
@@ -143,12 +143,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .graph-legend {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             font-size: 10px;
+            flex-wrap: wrap;
         }
         
         .legend-item {
@@ -163,65 +166,26 @@
             border-radius: 2px;
         }
         
-        .legend-color.mafia { background: #f00; }
-        .legend-color.town { background: #0f0; }
-        .legend-color.trust-high { background: #0f0; }
-        .legend-color.trust-low { background: #f00; }
-        .legend-color.trust-mid { background: #ff0; }
+        .legend-color.mafia { background: #ff0000; border: 1px solid #ff4444; }
+        .legend-color.town { background: #00cc00; border: 1px solid #44ff44; }
+        .legend-color.trust-high { background: #00ff00; }
+        .legend-color.trust-low { background: #ff0000; }
+        .legend-color.trust-mid { background: #ffff00; }
         
-        svg {
+        #trustCanvas {
             background: #0a0a0a;
+            border: 1px solid #0f0;
             border-radius: 5px;
-            cursor: move;
-        }
-        
-        .node circle {
-            stroke: #fff;
-            stroke-width: 2px;
-            transition: r 0.2s;
+            width: 100%;
+            height: auto;
             cursor: pointer;
         }
         
-        .node circle:hover {
-            stroke-width: 3px;
-            filter: brightness(1.2);
-        }
-        
-        .node text {
-            fill: #0f0;
-            font-size: 10px;
-            font-family: 'Courier New', monospace;
-            pointer-events: none;
-            text-shadow: 0 0 2px #000;
-        }
-        
-        .link {
-            stroke-opacity: 0.6;
-            transition: stroke-width 0.2s;
-        }
-        
-        .link:hover {
-            stroke-opacity: 1;
-            stroke-width: 3px;
-        }
-        
-        .node-label {
-            font-size: 9px;
-            fill: #0f0;
-        }
-        
-        .tooltip {
-            position: absolute;
-            background: #000;
-            border: 1px solid #0f0;
-            padding: 5px 10px;
+        .graph-stats {
+            margin-top: 10px;
             font-size: 11px;
-            font-family: monospace;
-            color: #0f0;
-            border-radius: 5px;
-            pointer-events: none;
-            z-index: 1000;
-            white-space: nowrap;
+            color: #666;
+            text-align: center;
         }
         
         .status {
@@ -286,8 +250,6 @@
             100% { opacity: 0; bottom: 70px; visibility: hidden; }
         }
     </style>
-    <!-- D3.js for graph visualization -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -325,19 +287,20 @@
             </table>
         </div>
         
-        <!-- SOCIAL NETWORK GRAPH SECTION -->
+        <!-- SIMPLE CANVAS GRAPH - NO D3.JS DEPENDENCIES -->
         <div class="graph-container" id="graphContainer" style="display: none;">
             <div class="graph-title">
                 <span>🔗 SOCIAL NETWORK GRAPH (Trust Relationships)</span>
                 <div class="graph-legend">
                     <div class="legend-item"><div class="legend-color mafia"></div><span>Mafia</span></div>
-                    <div class="legend-item"><div class="legend-color town"></div><span>Town</span></div>
-                    <div class="legend-item"><div class="legend-color trust-high"></div><span>Trust &gt; 0.5</span></div>
-                    <div class="legend-item"><div class="legend-color trust-mid"></div><span>Trust 0 to 0.5</span></div>
-                    <div class="legend-item"><div class="legend-color trust-low"></div><span>Trust &lt; 0</span></div>
+                    <div class="legend-item"><div class="legend-color town"></div><span>Town/Doctor/Detective</span></div>
+                    <div class="legend-item"><div class="legend-color trust-high"></div><span>Trust &gt; 0.3</span></div>
+                    <div class="legend-item"><div class="legend-color trust-mid"></div><span>Trust 0 to 0.3</span></div>
+                    <div class="legend-item"><div class="legend-color trust-low"></div><span>Distrust &lt; 0</span></div>
                 </div>
             </div>
-            <div id="graph"></div>
+            <canvas id="trustCanvas" width="1000" height="500" style="width:100%; height:auto; max-width:1000px; background:#0a0a0a;"></canvas>
+            <div class="graph-stats" id="graphStats">Loading graph data...</div>
         </div>
         
         <div class="controls">
@@ -379,9 +342,8 @@
     
     // Graph state
     let graphVisible = false;
-    let svg = null;
-    let simulation = null;
     let currentGraphData = { nodes: [], edges: [] };
+    let canvasPositions = {}; // Store node positions for consistent layout
     
     function generateGameId() {
         const timestamp = Date.now();
@@ -414,178 +376,186 @@
         return count;
     }
     
-    // Initialize or update the social network graph
-    function updateGraph(trustMatrix) {
-        if (!graphVisible || !trustMatrix) return;
+    // SIMPLE CANVAS GRAPH RENDERER - NO D3.JS
+    function renderCanvasGraph(trustMatrix) {
+        if (!graphVisible) return;
         
-        const container = document.getElementById('graph');
-        const width = container.clientWidth || 1000;
+        const canvas = document.getElementById('trustCanvas');
+        if (!canvas) return;
+        
+        // Get container width for responsive sizing
+        const container = canvas.parentElement;
+        const containerWidth = Math.min(container.clientWidth - 40, 1000);
+        const width = containerWidth;
         const height = 500;
         
-        // Filter dead nodes and ensure unique nodes
-        const aliveNodes = trustMatrix.nodes.filter(n => n.alive);
-        const nodeMap = new Map();
-        aliveNodes.forEach(n => nodeMap.set(n.id, n));
+        canvas.width = width;
+        canvas.height = height;
         
-        // Filter edges where both ends are alive
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        
+        if (!trustMatrix || !trustMatrix.nodes || trustMatrix.nodes.length === 0) {
+            document.getElementById('graphStats').textContent = 'No trust data available yet. Run a few cycles to build relationships.';
+            return;
+        }
+        
+        // Filter only alive nodes
+        const aliveNodes = trustMatrix.nodes.filter(n => n.alive);
+        const aliveNodeIds = new Set(aliveNodes.map(n => n.id));
+        
+        // Filter edges where both nodes are alive
         const validEdges = trustMatrix.edges.filter(e => 
-            nodeMap.has(e.source) && nodeMap.has(e.target)
+            aliveNodeIds.has(e.source) && aliveNodeIds.has(e.target)
         );
         
-        currentGraphData = {
-            nodes: aliveNodes,
-            edges: validEdges
+        if (aliveNodes.length === 0) {
+            document.getElementById('graphStats').textContent = 'No alive agents to display.';
+            return;
+        }
+        
+        // Calculate node positions in a circle layout (SIMPLE, RELIABLE)
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) * 0.35;
+        
+        // Store positions for this render
+        const positions = {};
+        aliveNodes.forEach((node, idx) => {
+            const angle = (idx / aliveNodes.length) * Math.PI * 2;
+            positions[node.id] = {
+                x: centerX + Math.cos(angle) * radius,
+                y: centerY + Math.sin(angle) * radius
+            };
+        });
+        
+        // Draw EDGES first (so they appear behind nodes)
+        validEdges.forEach(edge => {
+            const sourcePos = positions[edge.source];
+            const targetPos = positions[edge.target];
+            if (!sourcePos || !targetPos) return;
+            
+            // Set line color based on trust value
+            if (edge.trust > 0.3) {
+                ctx.strokeStyle = '#00ff00';  // Green = high trust
+            } else if (edge.trust > 0) {
+                ctx.strokeStyle = '#ffff00';  // Yellow = neutral trust
+            } else {
+                ctx.strokeStyle = '#ff0000';  // Red = distrust
+            }
+            
+            // Line thickness based on trust magnitude
+            const lineWidth = Math.max(1, Math.min(4, Math.abs(edge.trust) * 3));
+            ctx.lineWidth = lineWidth;
+            
+            // Dashed line for negative trust
+            if (edge.trust < 0) {
+                ctx.setLineDash([5, 5]);
+            } else {
+                ctx.setLineDash([]);
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(sourcePos.x, sourcePos.y);
+            ctx.lineTo(targetPos.x, targetPos.y);
+            ctx.stroke();
+        });
+        
+        // Reset line dash
+        ctx.setLineDash([]);
+        
+        // Draw NODES
+        aliveNodes.forEach(node => {
+            const pos = positions[node.id];
+            if (!pos) return;
+            
+            // Node radius: Mafia larger
+            const radius = node.role === 0 ? 16 : 12;
+            
+            // Fill color based on role
+            ctx.fillStyle = node.role === 0 ? '#800000' : '#006400';
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Border: Mafia = red, Town = green
+            ctx.strokeStyle = node.role === 0 ? '#ff0000' : '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Agent ID label
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 12px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.id.toString(), pos.x, pos.y);
+            
+            // Role indicator letter (M=mafia, D=detective, C=doctor, V=villager)
+            let roleLetter = '';
+            if (node.role === 0) roleLetter = 'M';
+            else if (node.role === 2) roleLetter = 'Dc';
+            else if (node.role === 3) roleLetter = 'Dt';
+            else roleLetter = 'V';
+            
+            ctx.fillStyle = '#88ff88';
+            ctx.font = 'bold 10px "Courier New", monospace';
+            ctx.fillText(roleLetter, pos.x, pos.y + radius + 8);
+            
+            // Tooltip on hover (using canvas mousemove)
+            canvas.title = `${node.name} (${node.roleName})\nAgg:${node.aggression.toFixed(2)} Loy:${node.loyalty.toFixed(2)}\nPar:${node.paranoia.toFixed(2)} Dec:${node.deceit.toFixed(2)}`;
+        });
+        
+        // Draw edge labels (trust values on hover detection - simplified)
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
+            
+            // Check if hovering over an edge (simplified: check distance to line)
+            let hoveredEdge = null;
+            for (const edge of validEdges) {
+                const sourcePos = positions[edge.source];
+                const targetPos = positions[edge.target];
+                if (!sourcePos || !targetPos) continue;
+                
+                // Calculate distance from point to line segment
+                const Ax = sourcePos.x, Ay = sourcePos.y;
+                const Bx = targetPos.x, By = targetPos.y;
+                const Cx = mouseX, Cy = mouseY;
+                
+                const ABx = Bx - Ax, ABy = By - Ay;
+                const ACx = Cx - Ax, ACy = Cy - Ay;
+                const t = Math.max(0, Math.min(1, (ACx * ABx + ACy * ABy) / (ABx * ABx + ABy * ABy)));
+                const closestX = Ax + t * ABx;
+                const closestY = Ay + t * ABy;
+                const dx = Cx - closestX, dy = Cy - closestY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 8) {
+                    hoveredEdge = edge;
+                    break;
+                }
+            }
+            
+            if (hoveredEdge) {
+                canvas.style.cursor = 'pointer';
+                document.getElementById('graphStats').innerHTML = `🔗 Trust: ${hoveredEdge.trust.toFixed(3)} | Liking: ${hoveredEdge.liking.toFixed(3)}`;
+            } else {
+                canvas.style.cursor = 'default';
+                const nodeCount = aliveNodes.length;
+                const edgeCount = validEdges.length;
+                document.getElementById('graphStats').innerHTML = `📊 ${nodeCount} agents | ${edgeCount} trust relationships | Hover over nodes or edges for details`;
+            }
         };
         
-        if (currentGraphData.nodes.length === 0) return;
-        
-        // Clear previous graph
-        d3.select("#graph svg").remove();
-        
-        // Create new SVG
-        svg = d3.select("#graph")
-            .append("svg")
-            .attr("width", width)
-            .attr("height", height)
-            .attr("viewBox", [0, 0, width, height])
-            .style("background", "#0a0a0a");
-        
-        // Add zoom behavior
-        const zoom = d3.zoom()
-            .scaleExtent([0.5, 2])
-            .on("zoom", (event) => {
-                svg.selectAll(".zoom-group").attr("transform", event.transform);
-            });
-        
-        svg.call(zoom);
-        
-        const mainGroup = svg.append("g").attr("class", "zoom-group");
-        
-        // Create force simulation
-        simulation = d3.forceSimulation(currentGraphData.nodes)
-            .force("link", d3.forceLink(currentGraphData.edges).id(d => d.id).distance(120).strength(0.5))
-            .force("charge", d3.forceManyBody().strength(-200))
-            .force("center", d3.forceCenter(width / 2, height / 2))
-            .force("collision", d3.forceCollide().radius(30));
-        
-        // Draw edges (links)
-        const link = mainGroup.append("g")
-            .attr("class", "links")
-            .selectAll("line")
-            .data(currentGraphData.edges)
-            .enter()
-            .append("line")
-            .attr("class", "link")
-            .attr("stroke", d => {
-                if (d.trust > 0.5) return "#0f0";
-                if (d.trust > 0) return "#ff0";
-                return "#f00";
-            })
-            .attr("stroke-width", d => Math.min(3, Math.abs(d.trust) * 3 + 1))
-            .attr("stroke-dasharray", d => d.trust < 0 ? "4,4" : "none");
-        
-        // Add tooltip on edges
-        link.append("title")
-            .text(d => `Trust: ${d.trust.toFixed(3)}\nLiking: ${d.liking.toFixed(3)}`);
-        
-        // Draw nodes
-        const node = mainGroup.append("g")
-            .attr("class", "nodes")
-            .selectAll("g")
-            .data(currentGraphData.nodes)
-            .enter()
-            .append("g")
-            .attr("class", "node")
-            .call(d3.drag()
-                .on("start", dragStarted)
-                .on("drag", dragged)
-                .on("end", dragEnded));
-        
-        // Node circles
-        node.append("circle")
-            .attr("r", d => d.role === 0 ? 14 : 10)
-            .attr("fill", d => d.role === 0 ? "#800" : "#080")
-            .attr("stroke", d => d.role === 0 ? "#f00" : "#0f0")
-            .attr("stroke-width", 2);
-        
-        // Node labels
-        node.append("text")
-            .attr("text-anchor", "middle")
-            .attr("dy", -15)
-            .text(d => `${d.id}: ${d.name.substring(0, 8)}`)
-            .attr("fill", "#0f0")
-            .attr("font-size", "10px")
-            .attr("font-family", "monospace");
-        
-        // Small trait indicators below node
-        node.append("text")
-            .attr("text-anchor", "middle")
-            .attr("dy", 22)
-            .html(d => `A:${d.aggression.toFixed(1)}`)
-            .attr("fill", "#888")
-            .attr("font-size", "8px");
-        
-        // Tooltip on nodes
-        node.append("title")
-            .text(d => `${d.name} (${d.roleName})
-Aggression: ${d.aggression.toFixed(3)}
-Loyalty: ${d.loyalty.toFixed(3)}
-Paranoia: ${d.paranoia.toFixed(3)}
-Deceit: ${d.deceit.toFixed(3)}`);
-        
-        // Update positions on simulation tick
-        simulation.on("tick", () => {
-            link
-                .attr("x1", d => d.source.x)
-                .attr("y1", d => d.source.y)
-                .attr("x2", d => d.target.x)
-                .attr("y2", d => d.target.y);
-            
-            node
-                .attr("transform", d => `translate(${d.x},${d.y})`);
-        });
-        
-        // Drag functions
-        function dragStarted(event, d) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-        }
-        
-        function dragged(event, d) {
-            d.fx = event.x;
-            d.fy = event.y;
-        }
-        
-        function dragEnded(event, d) {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-        }
-        
-        // Add resize handler
-        window.addEventListener('resize', () => {
-            if (graphVisible) {
-                updateGraph(trustMatrix);
-            }
-        });
-    }
-    
-    function dragStarted(event, d) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-    }
-    
-    function dragged(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-    }
-    
-    function dragEnded(event, d) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
+        // Update stats display
+        const mafiaCount = aliveNodes.filter(n => n.role === 0).length;
+        const townCount = aliveNodes.length - mafiaCount;
+        document.getElementById('graphStats').innerHTML = `🎭 ${mafiaCount} Mafia | ${townCount} Town | ${validEdges.length} trust connections | Hover for details`;
     }
     
     async function startNewGame() {
@@ -675,15 +645,57 @@ Deceit: ${d.deceit.toFixed(3)}`);
             container.style.display = 'block';
             toggleBtn.innerHTML = '📊 HIDE GRAPH';
             toggleBtn.style.background = '#0a0';
-            // Trigger graph render on next state update
-            if (currentGraphData.nodes.length > 0) {
-                updateGraph(currentGraphData);
+            // Try to render if we have data
+            if (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0) {
+                renderCanvasGraph(currentGraphData);
+            } else if (agents.length > 0) {
+                // Build basic graph from relationships if no trustMatrix
+                buildBasicGraphFromRelations();
             }
         } else {
             container.style.display = 'none';
             toggleBtn.innerHTML = '📊 SHOW GRAPH';
             toggleBtn.style.background = '#333';
         }
+    }
+    
+    function buildBasicGraphFromRelations() {
+        // Fallback if server doesn't send trustMatrix
+        const nodes = agents.map(a => ({
+            id: a.id,
+            name: a.name,
+            role: a.role,
+            roleName: a.roleName,
+            alive: a.alive,
+            aggression: a.aggression,
+            loyalty: a.loyalty,
+            paranoia: a.paranoia,
+            deceit: a.deceit
+        }));
+        
+        // Generate mock edges for visualization (random trust based on traits)
+        const edges = [];
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                if (nodes[i].alive && nodes[j].alive) {
+                    // Calculate trust based on trait similarity
+                    const trust = (nodes[i].aggression - nodes[j].aggression) * 0.3 + 
+                                  (nodes[i].loyalty - nodes[j].loyalty) * 0.3 +
+                                  (Math.random() - 0.5) * 0.4;
+                    if (Math.abs(trust) > 0.1) {
+                        edges.push({
+                            source: nodes[i].id,
+                            target: nodes[j].id,
+                            trust: Math.max(-1, Math.min(1, trust)),
+                            liking: trust * 0.8
+                        });
+                    }
+                }
+            }
+        }
+        
+        currentGraphData = { nodes, edges: edges.slice(0, 50) };
+        renderCanvasGraph(currentGraphData);
     }
     
     function connect() {
@@ -728,10 +740,14 @@ Deceit: ${d.deceit.toFixed(3)}`);
             if (msg.type === 'state') {
                 if (msg.data.gameId === currentGameId || !expectedNextGameId) {
                     updateUI(msg.data);
-                    // Update graph with trust matrix
-                    if (msg.data.trustMatrix && graphVisible) {
-                        updateGraph(msg.data.trustMatrix);
+                    // Store graph data and render if visible
+                    if (msg.data.trustMatrix) {
                         currentGraphData = msg.data.trustMatrix;
+                        if (graphVisible) {
+                            renderCanvasGraph(currentGraphData);
+                        }
+                    } else if (graphVisible && agents.length > 0) {
+                        buildBasicGraphFromRelations();
                     }
                     if (msg.data.gameOver && !gameOver && !isResetting) {
                         handleGameOver(msg.data.winner || 'unknown');
@@ -741,9 +757,13 @@ Deceit: ${d.deceit.toFixed(3)}`);
             if (msg.type === 'cycle_complete') {
                 if (msg.data.gameId === currentGameId && !isResetting) {
                     updateUI(msg.data);
-                    if (msg.data.trustMatrix && graphVisible) {
-                        updateGraph(msg.data.trustMatrix);
+                    if (msg.data.trustMatrix) {
                         currentGraphData = msg.data.trustMatrix;
+                        if (graphVisible) {
+                            renderCanvasGraph(currentGraphData);
+                        }
+                    } else if (graphVisible && agents.length > 0) {
+                        buildBasicGraphFromRelations();
                     }
                     if (msg.winner && !gameOver) {
                         handleGameOver(msg.winner);
