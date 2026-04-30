@@ -257,7 +257,8 @@
     let agents = [];
     let gameOver = false;
     let currentWinner = null;
-    let isResettingAfterWin = false;  // Prevent multiple reset loops
+    let isResetting = false;  // Prevent multiple reset loops
+    let expectedNextGameId = null;  // Track expected new game ID to ignore old messages
     
     // Generate unique session ID for this player
     function generateGameId() {
@@ -295,16 +296,25 @@
     
     // Start a brand new game (clears all state)
     function startNewGame() {
-        if (isResettingAfterWin) return;
+        if (isResetting) {
+            console.log('Already resetting, ignoring duplicate call');
+            return;
+        }
+        
+        isResetting = true;
         
         // Generate fresh game ID
         const newAgentCount = promptAgentCount();
-        if (newAgentCount === null) return;
+        if (newAgentCount === null) {
+            isResetting = false;
+            return;
+        }
         
         currentAgentCount = newAgentCount;
         document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
         
         const uniqueGameId = generateGameId();
+        expectedNextGameId = uniqueGameId;  // Set expected ID to filter messages
         currentGameId = uniqueGameId;
         document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
         
@@ -341,11 +351,17 @@
             console.warn('Cannot create new game - WebSocket not connected, reconnecting...');
             connect();
         }
+        
+        // Reset the flag after a delay to allow the game to initialize
+        setTimeout(() => {
+            isResetting = false;
+        }, 1000);
     }
     
     // Handle game over - show alert then automatically start new game when OK is pressed
     function handleGameOver(winner) {
         if (gameOver) return;  // Already handled
+        if (isResetting) return;  // Already resetting
         
         gameOver = true;
         currentWinner = winner;
@@ -354,7 +370,7 @@
         const nextBtn = document.getElementById('nextCycleBtn');
         nextBtn.disabled = true;
         nextBtn.style.opacity = '0.5';
-        nextBtn.title = 'Game over - starting new game...';
+        nextBtn.title = 'Game over - click OK to start new game';
         
         const nudgeUpBtn = document.getElementById('nudgeUpBtn');
         const nudgeDownBtn = document.getElementById('nudgeDownBtn');
@@ -373,6 +389,11 @@
     }
     
     function connect() {
+        // Close existing connection if any
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close();
+        }
+        
         const wsUrl = `wss://edgemafia-neural.onrender.com`;
         console.log('Connecting to WebSocket:', wsUrl);
         
@@ -385,12 +406,13 @@
             document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
             
             const uniqueGameId = generateGameId();
+            expectedNextGameId = uniqueGameId;
             currentGameId = uniqueGameId;
             document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
             
             gameOver = false;
             currentWinner = null;
-            isResettingAfterWin = false;
+            isResetting = false;
             
             console.log(`Creating private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
@@ -403,25 +425,34 @@
         
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
+            
+            // IGNORE messages from old games after reset
+            if (msg.data && msg.data.gameId && expectedNextGameId && msg.data.gameId !== expectedNextGameId) {
+                console.log(`Ignoring message from old game ${msg.data.gameId}, expecting ${expectedNextGameId}`);
+                return;
+            }
+            
             if (msg.type === 'state') {
-                updateUI(msg.data);
-                if (msg.data.gameOver && !gameOver) {
-                    handleGameOver(msg.data.winner || 'unknown');
+                // Only update UI if this is our current game
+                if (msg.data.gameId === currentGameId || !expectedNextGameId) {
+                    updateUI(msg.data);
+                    if (msg.data.gameOver && !gameOver && !isResetting) {
+                        handleGameOver(msg.data.winner || 'unknown');
+                    }
                 }
             }
             if (msg.type === 'cycle_complete') {
-                updateUI(msg.data);
-                if (msg.winner && !gameOver) {
-                    handleGameOver(msg.winner);
+                // Only process if this is our current game and not already resetting
+                if (msg.data.gameId === currentGameId && !isResetting) {
+                    updateUI(msg.data);
+                    if (msg.winner && !gameOver) {
+                        handleGameOver(msg.winner);
+                    }
                 }
             }
             if (msg.type === 'nudge_ack') {
                 console.log(`Nudge: ${msg.agentId} ${msg.trait} -> ${msg.newValue.toFixed(3)}`);
                 showToast(`Nudged Agent ${msg.agentId}: ${msg.trait} → ${msg.newValue.toFixed(3)}`);
-                // Refresh state after nudge
-                if (ws && ws.readyState === WebSocket.OPEN && currentGameId && !gameOver) {
-                    ws.send(JSON.stringify({ type: 'join_game', gameId: currentGameId, loadExisting: true, n: currentAgentCount }));
-                }
             }
         };
         
@@ -436,6 +467,11 @@
     }
     
     function updateUI(state) {
+        // Safety check - don't update UI if game IDs don't match during reset
+        if (expectedNextGameId && state.gameId !== expectedNextGameId && state.gameId !== currentGameId) {
+            return;
+        }
+        
         currentGameId = state.gameId;
         agents = state.agents;
         
@@ -499,6 +535,11 @@
             return;
         }
         
+        if (isResetting) {
+            showToast('Please wait, resetting game...');
+            return;
+        }
+        
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
             console.log('Requesting next cycle...');
             ws.send(JSON.stringify({ type: 'next_cycle' }));
@@ -512,6 +553,11 @@
     function nudgeAgent(agentId, trait, delta) {
         if (gameOver) {
             showToast('Game is over! Start a new game to nudge agents.');
+            return;
+        }
+        
+        if (isResetting) {
+            showToast('Please wait, game is resetting...');
             return;
         }
         

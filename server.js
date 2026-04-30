@@ -159,10 +159,9 @@ class EdgeMafiaGame {
         }
     }
     
-    // ===== NEW: Dynamic Trait Evolution =====
+    // ===== Dynamic Trait Evolution =====
     evolveTraits(agentId, cycleOutcome) {
         const reward = this.totalReward[agentId];
-        const meta = this.metaParams[agentId];
         const role = this.roles[agentId];
         const isMafia = role === 0;
         
@@ -174,9 +173,9 @@ class EdgeMafiaGame {
         
         // AGGRESSION: Increases with wins, decreases with losses
         if (reward > 0.3) {
-            aggressionDelta += 0.02 * (reward / 1.5);  // Win more = more aggressive
+            aggressionDelta += 0.02 * (reward / 1.5);
         } else if (reward < -0.2) {
-            aggressionDelta -= 0.015;  // Lose = less aggressive (cautious)
+            aggressionDelta -= 0.015;
         }
         
         // Mafia-specific: Successful lies increase aggression
@@ -186,14 +185,12 @@ class EdgeMafiaGame {
         
         // LOYALTY: Increases when voting with team, decreases when betraying
         if (isMafia) {
-            // Mafia loyalty: higher when mafia wins, lower when caught
             if (reward > 0.5) loyaltyDelta += 0.03;
             if (this.deceptionMemory[agentId].liesCaught > 0) loyaltyDelta -= 0.02;
         } else {
-            // Town loyalty: higher when town wins, lower when lynching town
             if (reward > 0.5) loyaltyDelta += 0.02;
             if (this.lastVote[agentId] !== -1 && this.roles[this.lastVote[agentId]] !== 0 && this.roles[this.lastVote[agentId]] !== 0) {
-                loyaltyDelta -= 0.01;  // Voted to lynch a townie
+                loyaltyDelta -= 0.01;
             }
         }
         
@@ -202,9 +199,8 @@ class EdgeMafiaGame {
             paranoiaDelta += 0.03 * this.attacked[agentId];
         }
         if (this.deceptionMemory[agentId].liesCaught > 0) {
-            paranoiaDelta += 0.02;  // Got caught lying = more paranoid
+            paranoiaDelta += 0.02;
         }
-        // Natural decay over time (trust builds)
         paranoiaDelta -= 0.005;
         
         // DECEIT: Increases when lying succeeds, decreases when caught
@@ -220,11 +216,11 @@ class EdgeMafiaGame {
         
         // Role-based natural tendencies
         if (isMafia) {
-            deceitDelta += 0.005;  // Mafia naturally become more deceitful over time
-        } else if (role === 3) {  // Detective
+            deceitDelta += 0.005;
+        } else if (role === 3) {
             paranoiaDelta += 0.005;
             deceitDelta -= 0.005;
-        } else if (role === 2) {  // Doctor
+        } else if (role === 2) {
             loyaltyDelta += 0.005;
             aggressionDelta -= 0.005;
         }
@@ -245,19 +241,8 @@ class EdgeMafiaGame {
             reward: reward
         });
         
-        // Keep history manageable (last 50 entries)
         if (this.traitHistory[agentId].length > 50) {
             this.traitHistory[agentId].shift();
-        }
-        
-        // Log significant changes
-        if (Math.abs(aggressionDelta) > 0.01 || Math.abs(loyaltyDelta) > 0.01 || 
-            Math.abs(paranoiaDelta) > 0.01 || Math.abs(deceitDelta) > 0.01) {
-            console.log(`[TRAIT] Agent ${agentId} (${this.getRoleName(role)}): ` +
-                `Agg ${this.aggression[agentId].toFixed(3)} (Δ${aggressionDelta.toFixed(3)}), ` +
-                `Loy ${this.loyalty[agentId].toFixed(3)} (Δ${loyaltyDelta.toFixed(3)}), ` +
-                `Par ${this.paranoia[agentId].toFixed(3)} (Δ${paranoiaDelta.toFixed(3)}), ` +
-                `Dec ${this.deceit[agentId].toFixed(3)} (Δ${deceitDelta.toFixed(3)})`);
         }
     }
     
@@ -272,7 +257,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Random initial trust connections
         for (let i = 0; i < this.n; i++) {
             const connections = [];
             for (let j = 0; j < this.n; j++) {
@@ -297,7 +281,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Mafia trust boost
         for (let i = 0; i < this.n; i++) {
             if (this.roles[i] !== 0) continue;
             for (let j = 0; j < this.n; j++) {
@@ -344,57 +327,44 @@ class EdgeMafiaGame {
         return items[items.length - 1];
     }
     
-    // ===== EMERGENT DECEPTION METHODS =====
-    
     decideToLie(agentId, targetId, truthfulBelief) {
         const agent = this.deceptionMemory[agentId];
         const deceitTrait = this.deceit[agentId];
         const aggression = this.aggression[agentId];
         const paranoia = this.paranoia[agentId];
         
-        // Calculate expected value of lying
         let lieValue = 0;
-        
-        // Benefit: If target is mafia and I'm mafia, lying protects them
         const targetIsMafia = this.roles[targetId] === 0;
         const amMafia = this.roles[agentId] === 0;
         
         if (amMafia && targetIsMafia) {
-            lieValue += 0.8;  // Protect fellow mafia
+            lieValue += 0.8;
         }
-        
-        // Benefit: If I'm mafia and target is town, lying gets town killed
         if (amMafia && !targetIsMafia) {
             lieValue += 0.6;
         }
-        
-        // Benefit: If I'm town and target is mafia, telling truth is good
         if (!amMafia && targetIsMafia) {
-            lieValue -= 0.5;  // Don't lie about mafia
+            lieValue -= 0.5;
         }
         
-        // Cost: Risk of being caught
         const caughtProbability = this.estimateLieDetectionRisk(agentId, targetId);
         lieValue -= caughtProbability * 1.2;
         
-        // Learning from past lies
         if (agent.liesTold > 0) {
             const successRate = agent.liesBeneficial / agent.liesTold;
             lieValue += successRate * 0.5 - (agent.liesCaught / agent.liesTold) * 0.8;
         }
         
-        // Trait influence (now dynamic!)
         lieValue += (deceitTrait - 0.5) * 0.3;
         lieValue += (aggression - 0.5) * 0.2;
         lieValue -= (paranoia - 0.5) * 0.4;
         
-        // Meta-learning: use adaptive exploration rate
         const meta = this.metaParams[agentId];
         const epsilon = meta.explorationRate;
         
         let willLie = false;
         if (Math.random() < epsilon) {
-            willLie = Math.random() < 0.5;  // Random exploration
+            willLie = Math.random() < 0.5;
         } else {
             willLie = lieValue > 0.3;
         }
@@ -409,9 +379,8 @@ class EdgeMafiaGame {
     }
     
     estimateLieDetectionRisk(liarId, targetId) {
-        let risk = 0.2;  // Base risk
+        let risk = 0.2;
         
-        // Higher risk if detective is alive
         for (let i = 0; i < this.n; i++) {
             if (this.alive[i] && this.roles[i] === 3) {
                 const detectiveTrust = this.getTrust(i, liarId);
@@ -419,15 +388,13 @@ class EdgeMafiaGame {
             }
         }
         
-        // Risk increases with reputation tracking
         for (let i = 0; i < this.n; i++) {
             if (i !== liarId && this.alive[i]) {
                 const rep = this.reputation[i][liarId];
-                if (rep < 0.3) risk += 0.2;  // Known liar
+                if (rep < 0.3) risk += 0.2;
             }
         }
         
-        // Risk increases if target has high trust
         const targetTrust = this.getTrust(targetId, liarId);
         risk += targetTrust * 0.25;
         
@@ -439,7 +406,6 @@ class EdgeMafiaGame {
         
         if (wasCaught) {
             memory.liesCaught++;
-            // Reduce everyone's trust in this agent
             for (let i = 0; i < this.n; i++) {
                 if (i !== liarId && this.alive[i]) {
                     this.reputation[i][liarId] = Math.max(0, this.reputation[i][liarId] - 0.3);
@@ -453,7 +419,6 @@ class EdgeMafiaGame {
         if (wasBeneficial) {
             memory.liesBeneficial++;
             memory.honestyScore = Math.min(1, memory.honestyScore + 0.05);
-            // Only mafia allies know it was beneficial
             for (let i = 0; i < this.n; i++) {
                 if (this.alive[i] && this.roles[i] === 0 && this.roles[liarId] === 0) {
                     this.reputation[i][liarId] = Math.min(1, this.reputation[i][liarId] + 0.2);
@@ -462,17 +427,13 @@ class EdgeMafiaGame {
         }
     }
     
-    // ===== META-LEARNING METHODS =====
-    
     metaLearn(agentId, cycleOutcome) {
         const meta = this.metaParams[agentId];
         const reward = this.totalReward[agentId];
         
-        // Track performance window (last 10 cycles)
         meta.performanceHistory.push(reward);
         if (meta.performanceHistory.length > 10) meta.performanceHistory.shift();
         
-        // Calculate performance trend
         let trend = 0;
         if (meta.performanceHistory.length >= 5) {
             const oldAvg = meta.performanceHistory.slice(0, 5).reduce((a,b)=>a+b,0)/5;
@@ -480,25 +441,18 @@ class EdgeMafiaGame {
             trend = newAvg - oldAvg;
         }
         
-        // Adjust learning rate based on trend
         if (trend > 0.1) {
-            // Doing well - reduce learning rate (fine-tuning)
             meta.learningRate = Math.max(0.0001, meta.learningRate * 0.99);
         } else if (trend < -0.1) {
-            // Doing poorly - increase learning rate (explore more)
             meta.learningRate = Math.min(0.01, meta.learningRate * 1.05);
         }
         
-        // Adjust exploration rate based on reward
         if (reward > 0.5) {
-            // Winning - reduce exploration
             meta.explorationRate = Math.max(0.02, meta.explorationRate * 0.98);
         } else if (reward < -0.5) {
-            // Losing - increase exploration
             meta.explorationRate = Math.min(0.3, meta.explorationRate * 1.02);
         }
         
-        // EVOLVE TRAITS based on performance (NEW!)
         this.evolveTraits(agentId, cycleOutcome);
         
         return meta.learningRate;
@@ -523,18 +477,14 @@ class EdgeMafiaGame {
         const meta = this.metaParams[agentId];
         const strategyUsed = this.determineStrategyUsed(agentId);
         
-        // Reinforce the strategy that led to correct vote
         meta.strategyWeights[strategyUsed] = Math.min(0.8, 
             meta.strategyWeights[strategyUsed] + 0.05);
         
-        // Normalize
         const sum = meta.strategyWeights.trustBased + meta.strategyWeights.beliefBased + meta.strategyWeights.revengeBased;
         meta.strategyWeights.trustBased /= sum;
         meta.strategyWeights.beliefBased /= sum;
         meta.strategyWeights.revengeBased /= sum;
     }
-    
-    // ===== EXISTING GAME METHODS (Mafia, Doctor, Detective choices) =====
     
     chooseMafiaTarget(self) {
         const candidates = [];
@@ -547,7 +497,6 @@ class EdgeMafiaGame {
             const liking = this.getLiking(self, j);
             let score = Math.max(0.01, -(trust + liking) * (0.5 + A));
             
-            // Meta-learning: adjust based on strategy weights
             const meta = this.metaParams[self];
             score = score * (0.5 + meta.strategyWeights.beliefBased);
             
@@ -617,13 +566,11 @@ class EdgeMafiaGame {
         }
         if (candidates.length === 0) return -1;
         
-        // Shuffle
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
         }
         
-        // Find best target using adaptive strategy weights
         let primaryTarget = -1;
         let bestScore = -Infinity;
         const meta = this.metaParams[self];
@@ -633,7 +580,6 @@ class EdgeMafiaGame {
             const beliefScore = this.probMafia[self][j];
             const revengeScore = this.attacked[j] > 0 ? 1 : 0;
             
-            // Weighted combination based on learned strategy
             const score = (trustScore * meta.strategyWeights.trustBased * -0.5) +
                          (beliefScore * meta.strategyWeights.beliefBased * 1.0) +
                          (revengeScore * meta.strategyWeights.revengeBased * 0.8);
@@ -646,7 +592,6 @@ class EdgeMafiaGame {
         
         if (primaryTarget === -1) return -1;
         
-        // Build state vector
         const trust = this.getTrust(self, primaryTarget);
         const betrayal = this.relations[self].get(primaryTarget)?.betrayal || 0;
         const consistency = this.relations[self].get(primaryTarget)?.consistency || 0;
@@ -707,7 +652,6 @@ class EdgeMafiaGame {
     }
     
     nightPhase() {
-        // Mafia kill
         let mafiaKill = -1;
         for (let i = 0; i < this.n; i++) {
             if (this.alive[i] && this.roles[i] === 0) {
@@ -726,7 +670,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Doctor save
         let doctorSave = -1;
         for (let i = 0; i < this.n; i++) {
             if (this.alive[i] && this.roles[i] === 2) {
@@ -735,7 +678,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Detective check
         let detectiveCheck = -1;
         let detectiveId = -1;
         for (let i = 0; i < this.n; i++) {
@@ -775,7 +717,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Decay relationships
         for (let i = 0; i < this.n; i++) {
             const decay = 0.0008 * (0.5 + this.paranoia[i]);
             for (const [j, rel] of this.relations[i]) {
@@ -784,7 +725,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Update memory
         for (let i = 0; i < this.n; i++) {
             if (!this.alive[i]) continue;
             const ctx = new Array(STATE_SIZE + 5).fill(0);
@@ -802,7 +742,6 @@ class EdgeMafiaGame {
         const votes = new Array(this.n).fill(-1);
         this.dayStatements = [];
         
-        // First pass: agents decide on targets and whether to lie
         for (let i = 0; i < this.n; i++) {
             if (!this.alive[i]) continue;
             
@@ -814,7 +753,6 @@ class EdgeMafiaGame {
             
             let statedBelief = truthfulBelief;
             if (willLie) {
-                // Lie: claim opposite belief
                 statedBelief = Math.min(0.99, Math.max(0.01, 1 - truthfulBelief));
             }
             
@@ -829,7 +767,6 @@ class EdgeMafiaGame {
             votes[i] = target;
         }
         
-        // Second pass: others update beliefs based on statements
         for (const stmt of this.dayStatements) {
             for (let obs = 0; obs < this.n; obs++) {
                 if (!this.alive[obs] || obs === stmt.agent) continue;
@@ -840,13 +777,11 @@ class EdgeMafiaGame {
             }
         }
         
-        // Count votes
         const voteCount = new Array(this.n).fill(0);
         for (let i = 0; i < this.n; i++) {
             if (votes[i] !== -1) voteCount[votes[i]]++;
         }
         
-        // Find lynch target
         let lynchTarget = -1;
         let maxVotes = 0;
         for (let i = 0; i < this.n; i++) {
@@ -882,7 +817,6 @@ class EdgeMafiaGame {
             this.probMafia[i][lynchTarget] = 0;
         }
         
-        // Process votes and update deception tracking
         for (const stmt of this.dayStatements) {
             if (stmt.target === lynchTarget) {
                 const wasCorrect = (this.roles[lynchTarget] === 0) === (stmt.truthful > 0.5);
@@ -897,7 +831,6 @@ class EdgeMafiaGame {
             if (votes[i] === lynchTarget) {
                 this.totalReward[i] += wasMafia ? 0.4 : -0.1;
                 
-                // Update strategy weights if vote was correct
                 const wasCorrectVote = (wasMafia === (this.probMafia[i][lynchTarget] > 0.5));
                 this.updateStrategyWeights(i, wasCorrectVote);
                 
@@ -930,11 +863,9 @@ class EdgeMafiaGame {
             this.lastVote[i] = votes[i];
         }
         
-        // Update memory with meta-learning context
         for (let i = 0; i < this.n; i++) {
             if (!this.alive[i]) continue;
             
-            // Apply meta-learning (which now includes trait evolution)
             this.metaLearn(i, this.totalReward[i]);
             
             const ctx = new Array(STATE_SIZE + 5).fill(0);
@@ -967,7 +898,6 @@ class EdgeMafiaGame {
     }
     
     runCycle() {
-        // Check if game is already over
         if (this.isGameOver) {
             console.log(`[GAME] Game already over. Winner: ${this.winner}`);
             return this.winner;
@@ -1055,7 +985,6 @@ class EdgeMafiaGame {
     }
     
     async saveToSupabase() {
-        // Save agents
         for (let i = 0; i < this.n; i++) {
             const { error } = await supabase
                 .from('agents')
@@ -1078,7 +1007,6 @@ class EdgeMafiaGame {
             if (error) console.error('Save agent error:', error);
         }
         
-        // Save relationships
         for (let i = 0; i < this.n; i++) {
             for (const [j, rel] of this.relations[i]) {
                 if (i < j) {
@@ -1101,7 +1029,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Save game state
         const { error: stateError } = await supabase
             .from('game_state')
             .upsert({
@@ -1113,7 +1040,6 @@ class EdgeMafiaGame {
         
         if (stateError) console.error('Save game state error:', stateError);
         
-        // Save agent meta parameters
         for (let i = 0; i < this.n; i++) {
             const meta = this.metaParams[i];
             const { error } = await supabase
@@ -1127,13 +1053,12 @@ class EdgeMafiaGame {
                     performance_history: meta.performanceHistory,
                     wins: meta.wins,
                     losses: meta.losses,
-                    trait_history: this.traitHistory[i]  // Save trait evolution history
+                    trait_history: this.traitHistory[i]
                 }, { onConflict: 'game_id, agent_id' });
             
             if (error) console.error('Save agent meta error:', error);
         }
         
-        // Save NN checkpoint every 10 cycles
         if (this.cycle % 10 === 0) {
             const { error: nnError } = await supabase
                 .from('nn_checkpoints')
@@ -1150,7 +1075,6 @@ class EdgeMafiaGame {
     }
     
     async loadFromSupabase() {
-        // Load agents
         const { data: agents, error: agentsError } = await supabase
             .from('agents')
             .select('*')
@@ -1174,7 +1098,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Load relationships
         const { data: rels, error: relsError } = await supabase
             .from('relationships')
             .select('*')
@@ -1201,7 +1124,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Load game state
         const { data: state, error: stateError } = await supabase
             .from('game_state')
             .select('cycle, status, winner')
@@ -1214,7 +1136,6 @@ class EdgeMafiaGame {
             this.winner = state.winner;
         }
         
-        // Load agent meta parameters
         const { data: metaData, error: metaError } = await supabase
             .from('agent_meta')
             .select('*')
@@ -1239,7 +1160,6 @@ class EdgeMafiaGame {
             }
         }
         
-        // Load latest NN checkpoint
         const { data: checkpoint, error: cpError } = await supabase
             .from('nn_checkpoints')
             .select('simple_nn, social_nn, memory_rnn')
@@ -1260,9 +1180,22 @@ class EdgeMafiaGame {
 // ========== SERVER STATE ==========
 let activeGames = new Map();
 
+// Clean up old games periodically (every hour)
+setInterval(() => {
+    const now = Date.now();
+    for (const [gameId, game] of activeGames) {
+        // Remove games older than 1 hour
+        const gameTimestamp = parseInt(gameId.split('_')[1]) || 0;
+        if (now - gameTimestamp > 3600000) {
+            console.log(`Cleaning up old game: ${gameId}`);
+            activeGames.delete(gameId);
+        }
+    }
+}, 3600000);
+
 // API Routes
 app.post('/api/game/new', async (req, res) => {
-    const { n = 20, loadExisting = false, gameId = null } = req.body;
+    const { n = 20, gameId = null } = req.body;
     const finalGameId = gameId || `game_${Date.now()}`;
     
     const game = new EdgeMafiaGame(Math.max(6, Math.min(100, n)), finalGameId);
