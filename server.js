@@ -58,6 +58,9 @@ class EdgeMafiaGame {
         this.lastState = new Array(n);
         this.episodes = new Array(n).fill().map(() => []);
         
+        // Track trait evolution history for each agent
+        this.traitHistory = new Array(n).fill().map(() => []);
+        
         // Game over tracking
         this.isGameOver = false;
         this.winner = null;
@@ -103,6 +106,17 @@ class EdgeMafiaGame {
         this.initRoles();
         this.initTraits();
         this.initRelations();
+        
+        // Record initial traits
+        for (let i = 0; i < n; i++) {
+            this.traitHistory[i].push({
+                cycle: 0,
+                aggression: this.aggression[i],
+                loyalty: this.loyalty[i],
+                paranoia: this.paranoia[i],
+                deceit: this.deceit[i]
+            });
+        }
     }
     
     initRoles() {
@@ -142,6 +156,108 @@ class EdgeMafiaGame {
             this.loyalty[i] = baseLoy[role] + spanLoy[role] * Math.random();
             this.paranoia[i] = basePar[role] + spanPar[role] * Math.random();
             this.deceit[i] = baseDec[role] + spanDec[role] * Math.random();
+        }
+    }
+    
+    // ===== NEW: Dynamic Trait Evolution =====
+    evolveTraits(agentId, cycleOutcome) {
+        const reward = this.totalReward[agentId];
+        const meta = this.metaParams[agentId];
+        const role = this.roles[agentId];
+        const isMafia = role === 0;
+        
+        // Calculate delta based on recent performance
+        let aggressionDelta = 0;
+        let loyaltyDelta = 0;
+        let paranoiaDelta = 0;
+        let deceitDelta = 0;
+        
+        // AGGRESSION: Increases with wins, decreases with losses
+        if (reward > 0.3) {
+            aggressionDelta += 0.02 * (reward / 1.5);  // Win more = more aggressive
+        } else if (reward < -0.2) {
+            aggressionDelta -= 0.015;  // Lose = less aggressive (cautious)
+        }
+        
+        // Mafia-specific: Successful lies increase aggression
+        if (isMafia && this.deceptionMemory[agentId].liesBeneficial > 0) {
+            aggressionDelta += 0.01 * Math.min(0.1, this.deceptionMemory[agentId].liesBeneficial / 10);
+        }
+        
+        // LOYALTY: Increases when voting with team, decreases when betraying
+        if (isMafia) {
+            // Mafia loyalty: higher when mafia wins, lower when caught
+            if (reward > 0.5) loyaltyDelta += 0.03;
+            if (this.deceptionMemory[agentId].liesCaught > 0) loyaltyDelta -= 0.02;
+        } else {
+            // Town loyalty: higher when town wins, lower when lynching town
+            if (reward > 0.5) loyaltyDelta += 0.02;
+            if (this.lastVote[agentId] !== -1 && this.roles[this.lastVote[agentId]] !== 0 && this.roles[this.lastVote[agentId]] !== 0) {
+                loyaltyDelta -= 0.01;  // Voted to lynch a townie
+            }
+        }
+        
+        // PARANOIA: Increases when attacked or betrayed, decreases when safe
+        if (this.attacked[agentId] > 0) {
+            paranoiaDelta += 0.03 * this.attacked[agentId];
+        }
+        if (this.deceptionMemory[agentId].liesCaught > 0) {
+            paranoiaDelta += 0.02;  // Got caught lying = more paranoid
+        }
+        // Natural decay over time (trust builds)
+        paranoiaDelta -= 0.005;
+        
+        // DECEIT: Increases when lying succeeds, decreases when caught
+        const lieSuccessRate = this.deceptionMemory[agentId].liesTold > 0 ? 
+            this.deceptionMemory[agentId].liesBeneficial / this.deceptionMemory[agentId].liesTold : 0.5;
+        
+        if (lieSuccessRate > 0.6) {
+            deceitDelta += 0.02 * (lieSuccessRate - 0.5);
+        }
+        if (this.deceptionMemory[agentId].liesCaught > 0) {
+            deceitDelta -= 0.02 * Math.min(0.1, this.deceptionMemory[agentId].liesCaught);
+        }
+        
+        // Role-based natural tendencies
+        if (isMafia) {
+            deceitDelta += 0.005;  // Mafia naturally become more deceitful over time
+        } else if (role === 3) {  // Detective
+            paranoiaDelta += 0.005;
+            deceitDelta -= 0.005;
+        } else if (role === 2) {  // Doctor
+            loyaltyDelta += 0.005;
+            aggressionDelta -= 0.005;
+        }
+        
+        // Apply deltas with bounds [-1, 1]
+        this.aggression[agentId] = Math.max(-1, Math.min(1, this.aggression[agentId] + aggressionDelta));
+        this.loyalty[agentId] = Math.max(-1, Math.min(1, this.loyalty[agentId] + loyaltyDelta));
+        this.paranoia[agentId] = Math.max(-1, Math.min(1, this.paranoia[agentId] + paranoiaDelta));
+        this.deceit[agentId] = Math.max(-1, Math.min(1, this.deceit[agentId] + deceitDelta));
+        
+        // Record trait history
+        this.traitHistory[agentId].push({
+            cycle: this.cycle,
+            aggression: this.aggression[agentId],
+            loyalty: this.loyalty[agentId],
+            paranoia: this.paranoia[agentId],
+            deceit: this.deceit[agentId],
+            reward: reward
+        });
+        
+        // Keep history manageable (last 50 entries)
+        if (this.traitHistory[agentId].length > 50) {
+            this.traitHistory[agentId].shift();
+        }
+        
+        // Log significant changes
+        if (Math.abs(aggressionDelta) > 0.01 || Math.abs(loyaltyDelta) > 0.01 || 
+            Math.abs(paranoiaDelta) > 0.01 || Math.abs(deceitDelta) > 0.01) {
+            console.log(`[TRAIT] Agent ${agentId} (${this.getRoleName(role)}): ` +
+                `Agg ${this.aggression[agentId].toFixed(3)} (Δ${aggressionDelta.toFixed(3)}), ` +
+                `Loy ${this.loyalty[agentId].toFixed(3)} (Δ${loyaltyDelta.toFixed(3)}), ` +
+                `Par ${this.paranoia[agentId].toFixed(3)} (Δ${paranoiaDelta.toFixed(3)}), ` +
+                `Dec ${this.deceit[agentId].toFixed(3)} (Δ${deceitDelta.toFixed(3)})`);
         }
     }
     
@@ -267,7 +383,7 @@ class EdgeMafiaGame {
             lieValue += successRate * 0.5 - (agent.liesCaught / agent.liesTold) * 0.8;
         }
         
-        // Trait influence (now just modifiers, not deciders)
+        // Trait influence (now dynamic!)
         lieValue += (deceitTrait - 0.5) * 0.3;
         lieValue += (aggression - 0.5) * 0.2;
         lieValue -= (paranoia - 0.5) * 0.4;
@@ -381,6 +497,9 @@ class EdgeMafiaGame {
             // Losing - increase exploration
             meta.explorationRate = Math.min(0.3, meta.explorationRate * 1.02);
         }
+        
+        // EVOLVE TRAITS based on performance (NEW!)
+        this.evolveTraits(agentId, cycleOutcome);
         
         return meta.learningRate;
     }
@@ -815,7 +934,7 @@ class EdgeMafiaGame {
         for (let i = 0; i < this.n; i++) {
             if (!this.alive[i]) continue;
             
-            // Apply meta-learning
+            // Apply meta-learning (which now includes trait evolution)
             this.metaLearn(i, this.totalReward[i]);
             
             const ctx = new Array(STATE_SIZE + 5).fill(0);
@@ -1007,7 +1126,8 @@ class EdgeMafiaGame {
                     strategy_weights: meta.strategyWeights,
                     performance_history: meta.performanceHistory,
                     wins: meta.wins,
-                    losses: meta.losses
+                    losses: meta.losses,
+                    trait_history: this.traitHistory[i]  // Save trait evolution history
                 }, { onConflict: 'game_id, agent_id' });
             
             if (error) console.error('Save agent meta error:', error);
@@ -1112,6 +1232,9 @@ class EdgeMafiaGame {
                         wins: m.wins || 0,
                         losses: m.losses || 0
                     };
+                    if (m.trait_history) {
+                        this.traitHistory[idx] = m.trait_history;
+                    }
                 }
             }
         }
@@ -1142,7 +1265,6 @@ app.post('/api/game/new', async (req, res) => {
     const { n = 20, loadExisting = false, gameId = null } = req.body;
     const finalGameId = gameId || `game_${Date.now()}`;
     
-    // Always create a fresh game for new requests
     const game = new EdgeMafiaGame(Math.max(6, Math.min(100, n)), finalGameId);
     await game.saveToSupabase();
     activeGames.set(finalGameId, game);
@@ -1160,7 +1282,6 @@ app.post('/api/game/:gameId/cycle', async (req, res) => {
     const game = activeGames.get(req.params.gameId);
     if (!game) return res.status(404).json({ error: 'Game not found' });
     
-    // If game is already over, return the winner without processing another cycle
     if (game.isGameOver) {
         return res.json({ 
             gameState: game.getGameState(), 
@@ -1180,7 +1301,6 @@ app.post('/api/game/:gameId/nudge', (req, res) => {
     const game = activeGames.get(req.params.gameId);
     if (!game) return res.status(404).json({ error: 'Game not found' });
     
-    // Don't allow nudging if game is over
     if (game.isGameOver) {
         return res.status(400).json({ error: 'Game is over, start a new game' });
     }
@@ -1246,7 +1366,6 @@ wss.on('connection', (ws) => {
         if (msg.type === 'next_cycle') {
             const game = activeGames.get(currentGameId);
             if (game) {
-                // Check if game is already over
                 if (game.isGameOver) {
                     ws.send(JSON.stringify({ 
                         type: 'cycle_complete', 
