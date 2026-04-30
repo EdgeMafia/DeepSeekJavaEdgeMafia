@@ -103,8 +103,15 @@
             font-weight: bold;
             cursor: pointer;
             border-radius: 5px;
+            transition: all 0.2s ease;
         }
-        button:hover { background: #0a0; }
+        button:hover { background: #0a0; transform: scale(1.02); }
+        button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
         .nudge-group {
             background: #111;
             padding: 10px;
@@ -158,9 +165,26 @@
             font-family: monospace;
         }
         
+        .game-over-badge {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f00;
+            color: #fff;
+            padding: 5px 15px;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 20px;
+            font-family: monospace;
+            animation: pulse 1s infinite;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; background: #f00; }
+            50% { opacity: 0.7; background: #800; }
         }
     </style>
 </head>
@@ -224,12 +248,15 @@
 </div>
 <div class="game-id-badge" id="gameIdBadge">Game: ---</div>
 <div class="agent-count-badge" id="agentCountBadge">Agents: ---</div>
+<div id="gameOverBadge" style="display: none;" class="game-over-badge">🏆 GAME OVER 🏆</div>
 
 <script>
     let ws = null;
     let currentGameId = null;
     let currentAgentCount = 20;
     let agents = [];
+    let gameOver = false;
+    let currentWinner = null;
     
     // Generate unique session ID for this player
     function generateGameId() {
@@ -257,6 +284,39 @@
         return count;
     }
     
+    // Update UI based on game over state
+    function setGameOverState(isGameOver, winner = null) {
+        gameOver = isGameOver;
+        currentWinner = winner;
+        const nextBtn = document.getElementById('nextCycleBtn');
+        const nudgeUpBtn = document.getElementById('nudgeUpBtn');
+        const nudgeDownBtn = document.getElementById('nudgeDownBtn');
+        const nudgeAgentSelect = document.getElementById('nudgeAgentSelect');
+        const nudgeTraitSelect = document.getElementById('nudgeTraitSelect');
+        const gameOverBadge = document.getElementById('gameOverBadge');
+        
+        if (isGameOver) {
+            nextBtn.disabled = true;
+            nextBtn.style.opacity = '0.5';
+            nextBtn.title = 'Game over - click NEW GAME';
+            nudgeUpBtn.disabled = true;
+            nudgeDownBtn.disabled = true;
+            nudgeAgentSelect.disabled = true;
+            nudgeTraitSelect.disabled = true;
+            gameOverBadge.style.display = 'block';
+            gameOverBadge.textContent = `🏆 GAME OVER - ${winner ? winner.toUpperCase() : 'UNKNOWN'} WINS! 🏆`;
+        } else {
+            nextBtn.disabled = false;
+            nextBtn.style.opacity = '1';
+            nextBtn.title = 'Advance to next cycle';
+            nudgeUpBtn.disabled = false;
+            nudgeDownBtn.disabled = false;
+            nudgeAgentSelect.disabled = false;
+            nudgeTraitSelect.disabled = false;
+            gameOverBadge.style.display = 'none';
+        }
+    }
+    
     function connect() {
         // Hardcoded Render backend URL
         const wsUrl = `wss://edgemafia-neural.onrender.com`;
@@ -276,6 +336,9 @@
             currentGameId = uniqueGameId;
             document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
             
+            // Reset game over state
+            setGameOverState(false, null);
+            
             console.log(`Creating private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
             ws.send(JSON.stringify({ 
                 type: 'join_game', 
@@ -289,15 +352,29 @@
             const msg = JSON.parse(event.data);
             if (msg.type === 'state') {
                 updateUI(msg.data);
+                // Sync game over state from server
+                if (msg.data.gameOver) {
+                    setGameOverState(true, msg.data.winner);
+                }
             }
             if (msg.type === 'cycle_complete') {
                 updateUI(msg.data);
                 if (msg.winner) {
-                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!\n\nClick NEW GAME to start another simulation.`);
+                    setGameOverState(true, msg.winner);
+                    alert(`GAME OVER! ${msg.winner.toUpperCase()} WINS!\n\nClick OK to acknowledge, then press NEW GAME to start another simulation.`);
+                } else {
+                    // Ensure button is enabled if game is not over
+                    if (!gameOver) {
+                        setGameOverState(false, null);
+                    }
                 }
             }
             if (msg.type === 'nudge_ack') {
                 console.log(`Nudge: ${msg.agentId} ${msg.trait} -> ${msg.newValue.toFixed(3)}`);
+                // Refresh state after nudge
+                if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
+                    ws.send(JSON.stringify({ type: 'join_game', gameId: currentGameId, loadExisting: true, n: currentAgentCount }));
+                }
             }
         };
         
@@ -369,28 +446,48 @@
     }
     
     function nextCycle() {
+        if (gameOver) {
+            alert('Game is already over! Click NEW GAME to start a fresh simulation.');
+            return;
+        }
+        
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
+            console.log('Requesting next cycle...');
             ws.send(JSON.stringify({ type: 'next_cycle' }));
         } else {
             console.warn('Cannot send next_cycle - WebSocket not connected');
+            alert('WebSocket disconnected. Reconnecting...');
+            connect();
         }
     }
     
     function nudgeAgent(agentId, trait, delta) {
+        if (gameOver) {
+            alert('Game is over! Start a new game to nudge agents.');
+            return;
+        }
+        
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
             ws.send(JSON.stringify({ type: 'nudge', agentId, trait, delta }));
+        } else {
+            console.warn('Cannot send nudge - WebSocket not connected');
         }
     }
     
     function newGame() {
         // PROMPT FOR AGENT COUNT ON NEW GAME
         const newAgentCount = promptAgentCount();
+        if (newAgentCount === null) return;
+        
         currentAgentCount = newAgentCount;
         document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
         
         const uniqueGameId = generateGameId();
         currentGameId = uniqueGameId;
         document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
+        
+        // Reset game over state
+        setGameOverState(false, null);
         
         if (ws && ws.readyState === WebSocket.OPEN) {
             console.log(`Creating NEW private game with ID: ${uniqueGameId}, Agents: ${currentAgentCount}`);
@@ -401,8 +498,7 @@
                 n: currentAgentCount
             }));
         } else {
-            console.warn('Cannot create new game - WebSocket not connected');
-            // Attempt to reconnect
+            console.warn('Cannot create new game - WebSocket not connected, reconnecting...');
             connect();
         }
     }

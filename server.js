@@ -58,6 +58,10 @@ class EdgeMafiaGame {
         this.lastState = new Array(n);
         this.episodes = new Array(n).fill().map(() => []);
         
+        // Game over tracking
+        this.isGameOver = false;
+        this.winner = null;
+        
         // Neural networks
         this.globalBrain = new SimpleNN(STATE_SIZE, HIDDEN_SIZE, ACTION_SIZE);
         this.socialBrain = new SocialNN(SOCIAL_IN, 32, 2);
@@ -844,17 +848,29 @@ class EdgeMafiaGame {
     }
     
     runCycle() {
+        // Check if game is already over
+        if (this.isGameOver) {
+            console.log(`[GAME] Game already over. Winner: ${this.winner}`);
+            return this.winner;
+        }
+        
         this.nightPhase();
         let winner = this.checkWin();
         if (winner) {
+            this.isGameOver = true;
+            this.winner = winner;
             this.updateFinalRewards(winner);
+            console.log(`[GAME OVER] ${winner.toUpperCase()} wins at cycle ${this.cycle}`);
             return winner;
         }
         
         this.dayPhase();
         winner = this.checkWin();
         if (winner) {
+            this.isGameOver = true;
+            this.winner = winner;
             this.updateFinalRewards(winner);
+            console.log(`[GAME OVER] ${winner.toUpperCase()} wins at cycle ${this.cycle}`);
             return winner;
         }
         
@@ -913,7 +929,9 @@ class EdgeMafiaGame {
             mafiaAlive,
             townAlive,
             gameId: this.gameId,
-            totalAgents: this.n
+            totalAgents: this.n,
+            gameOver: this.isGameOver,
+            winner: this.winner
         };
     }
     
@@ -970,7 +988,8 @@ class EdgeMafiaGame {
             .upsert({
                 game_id: this.gameId,
                 cycle: this.cycle,
-                status: 'active'
+                status: this.isGameOver ? 'completed' : 'active',
+                winner: this.winner
             });
         
         if (stateError) console.error('Save game state error:', stateError);
@@ -1065,12 +1084,14 @@ class EdgeMafiaGame {
         // Load game state
         const { data: state, error: stateError } = await supabase
             .from('game_state')
-            .select('cycle')
+            .select('cycle, status, winner')
             .eq('game_id', this.gameId)
             .single();
         
         if (!stateError && state) {
             this.cycle = state.cycle;
+            this.isGameOver = state.status === 'completed';
+            this.winner = state.winner;
         }
         
         // Load agent meta parameters
@@ -1109,7 +1130,7 @@ class EdgeMafiaGame {
             this.memBrain.deserialize(checkpoint[0].memory_rnn);
         }
         
-        console.log(`[LOAD] Loaded game ${this.gameId} at cycle ${this.cycle}`);
+        console.log(`[LOAD] Loaded game ${this.gameId} at cycle ${this.cycle}, gameOver=${this.isGameOver}`);
     }
 }
 
@@ -1121,17 +1142,10 @@ app.post('/api/game/new', async (req, res) => {
     const { n = 20, loadExisting = false, gameId = null } = req.body;
     const finalGameId = gameId || `game_${Date.now()}`;
     
-    let game = activeGames.get(finalGameId);
-    
-    if (!game && loadExisting) {
-        game = new EdgeMafiaGame(Math.max(6, Math.min(100, n)), finalGameId);
-        await game.loadFromSupabase();
-        activeGames.set(finalGameId, game);
-    } else if (!game) {
-        game = new EdgeMafiaGame(Math.max(6, Math.min(100, n)), finalGameId);
-        await game.saveToSupabase();
-        activeGames.set(finalGameId, game);
-    }
+    // Always create a fresh game for new requests
+    const game = new EdgeMafiaGame(Math.max(6, Math.min(100, n)), finalGameId);
+    await game.saveToSupabase();
+    activeGames.set(finalGameId, game);
     
     res.json({ gameId: finalGameId, n: game.n, cycle: game.cycle });
 });
@@ -1146,15 +1160,30 @@ app.post('/api/game/:gameId/cycle', async (req, res) => {
     const game = activeGames.get(req.params.gameId);
     if (!game) return res.status(404).json({ error: 'Game not found' });
     
+    // If game is already over, return the winner without processing another cycle
+    if (game.isGameOver) {
+        return res.json({ 
+            gameState: game.getGameState(), 
+            winner: game.winner, 
+            cycle: game.cycle,
+            gameOver: true 
+        });
+    }
+    
     const winner = game.runCycle();
     await game.saveToSupabase();
     
-    res.json({ gameState: game.getGameState(), winner, cycle: game.cycle });
+    res.json({ gameState: game.getGameState(), winner, cycle: game.cycle, gameOver: !!winner });
 });
 
 app.post('/api/game/:gameId/nudge', (req, res) => {
     const game = activeGames.get(req.params.gameId);
     if (!game) return res.status(404).json({ error: 'Game not found' });
+    
+    // Don't allow nudging if game is over
+    if (game.isGameOver) {
+        return res.status(400).json({ error: 'Game is over, start a new game' });
+    }
     
     const { agentId, trait, delta } = req.body;
     if (agentId < 0 || agentId >= game.n) {
@@ -1217,15 +1246,31 @@ wss.on('connection', (ws) => {
         if (msg.type === 'next_cycle') {
             const game = activeGames.get(currentGameId);
             if (game) {
+                // Check if game is already over
+                if (game.isGameOver) {
+                    ws.send(JSON.stringify({ 
+                        type: 'cycle_complete', 
+                        data: game.getGameState(), 
+                        winner: game.winner,
+                        gameOver: true 
+                    }));
+                    return;
+                }
+                
                 const winner = game.runCycle();
                 await game.saveToSupabase();
-                ws.send(JSON.stringify({ type: 'cycle_complete', data: game.getGameState(), winner }));
+                ws.send(JSON.stringify({ 
+                    type: 'cycle_complete', 
+                    data: game.getGameState(), 
+                    winner,
+                    gameOver: !!winner 
+                }));
             }
         }
         
         if (msg.type === 'nudge') {
             const game = activeGames.get(currentGameId);
-            if (game) {
+            if (game && !game.isGameOver) {
                 const { agentId, trait, delta } = msg;
                 if (game.alive[agentId]) {
                     game[trait][agentId] = Math.max(-1, Math.min(1, game[trait][agentId] + delta));
