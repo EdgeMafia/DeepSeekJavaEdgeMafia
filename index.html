@@ -165,6 +165,23 @@
             font-family: monospace;
         }
         
+        .controller-overlay {
+            position: fixed;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #0f0;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 10px;
+            color: #0f0;
+            font-family: monospace;
+            z-index: 999;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
         .toast {
             position: fixed;
             bottom: 50px;
@@ -239,7 +256,7 @@
             </select>
             <button id="nudgeUpBtn">+0.1</button>
             <button id="nudgeDownBtn">-0.1</button>
-            <span style="margin-left: 10px; font-size: 12px;">(Or use Gamepad: A=next, X=nudge+)</span>
+            <span style="margin-left: 10px; font-size: 12px;">(Or use Gamepad: A=next, X=nudge+, Y=nudge-, B=new game, Triggers=±10 agents)</span>
         </div>
     </div>
 </div>
@@ -249,6 +266,7 @@
 </div>
 <div class="game-id-badge" id="gameIdBadge">Game: ---</div>
 <div class="agent-count-badge" id="agentCountBadge">Agents: ---</div>
+<div class="controller-overlay" id="controllerOverlay">🎮 Controller: Connect Xbox controller</div>
 
 <script>
     let ws = null;
@@ -257,8 +275,19 @@
     let agents = [];
     let gameOver = false;
     let currentWinner = null;
-    let isResetting = false;  // Prevent multiple reset loops
-    let expectedNextGameId = null;  // Track expected new game ID to ignore old messages
+    let isResetting = false;
+    let expectedNextGameId = null;
+    
+    // Controller state tracking
+    let gamepadInterval = null;
+    let lastA = false;
+    let lastX = false;
+    let lastY = false;
+    let lastB = false;
+    let lastLeftTrigger = false;
+    let lastRightTrigger = false;
+    let isPromptActive = false;
+    let pendingAgentCount = 20;
     
     // Generate unique session ID for this player
     function generateGameId() {
@@ -276,26 +305,131 @@
         setTimeout(() => toast.remove(), 2000);
     }
     
-    // Prompt for agent count (called on first load and new game)
-    function promptAgentCount() {
-        let input = prompt('Number of AI agents per game (6-100):', '20');
-        let count = parseInt(input);
-        
-        if (isNaN(count)) {
-            count = 20;
-        } else if (count < 6) {
-            alert('Minimum 6 agents. Using 6.');
-            count = 6;
-        } else if (count > 100) {
-            alert('Maximum 100 agents. Using 100.');
-            count = 100;
+    // Update controller overlay
+    function updateControllerOverlay(connected) {
+        const overlay = document.getElementById('controllerOverlay');
+        if (connected) {
+            overlay.innerHTML = '🎮 Controller: Connected | A=Next Cycle | X=Nudge+ | Y=Nudge- | B=New Game | Triggers=±10 Agents';
+            overlay.style.color = '#0f0';
+            overlay.style.borderColor = '#0f0';
+        } else {
+            overlay.innerHTML = '🎮 Controller: Press any button to connect';
+            overlay.style.color = '#666';
+            overlay.style.borderColor = '#333';
         }
-        
-        return count;
+    }
+    
+    // Prompt for agent count with controller support
+    function promptAgentCount() {
+        return new Promise((resolve) => {
+            let currentCount = 20;
+            isPromptActive = true;
+            pendingAgentCount = 20;
+            
+            // Create custom modal dialog for controller support
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.9);
+                z-index: 2000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-family: 'Courier New', monospace;
+            `;
+            
+            const dialog = document.createElement('div');
+            dialog.style.cssText = `
+                background: #000;
+                border: 2px solid #0f0;
+                border-radius: 10px;
+                padding: 30px;
+                text-align: center;
+                min-width: 300px;
+            `;
+            
+            dialog.innerHTML = `
+                <h2 style="color:#0f0; margin-bottom:20px;">NUMBER OF AI AGENTS</h2>
+                <div style="font-size:48px; color:#0f0; margin:20px;" id="agentCountDisplay">20</div>
+                <div style="display:flex; gap:10px; justify-content:center; margin:20px;">
+                    <button id="modalMinusBtn" style="background:#0f0; color:#000; padding:10px 20px; font-size:20px;">-10</button>
+                    <button id="modalPlusBtn" style="background:#0f0; color:#000; padding:10px 20px; font-size:20px;">+10</button>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:center; margin:20px;">
+                    <button id="modalConfirmBtn" style="background:#0f0; color:#000; padding:10px 30px;">CONFIRM (A)</button>
+                    <button id="modalCancelBtn" style="background:#333; color:#0f0; padding:10px 30px;">CANCEL (B)</button>
+                </div>
+                <div style="margin-top:20px; font-size:11px; color:#666;">
+                    Controller: Left Trigger = -10 | Right Trigger = +10 | A = Confirm | B = Cancel
+                </div>
+            `;
+            
+            modal.appendChild(dialog);
+            document.body.appendChild(modal);
+            
+            const display = document.getElementById('agentCountDisplay');
+            
+            const updateDisplay = () => {
+                currentCount = Math.max(6, Math.min(100, currentCount));
+                display.textContent = currentCount;
+                pendingAgentCount = currentCount;
+            };
+            
+            const plusHandler = () => {
+                currentCount += 10;
+                updateDisplay();
+                showToast(`+10 agents → ${currentCount}`);
+            };
+            
+            const minusHandler = () => {
+                currentCount -= 10;
+                updateDisplay();
+                showToast(`-10 agents → ${currentCount}`);
+            };
+            
+            const confirmHandler = () => {
+                modal.remove();
+                isPromptActive = false;
+                resolve(currentCount);
+            };
+            
+            const cancelHandler = () => {
+                modal.remove();
+                isPromptActive = false;
+                resolve(null);
+            };
+            
+            document.getElementById('modalPlusBtn').onclick = plusHandler;
+            document.getElementById('modalMinusBtn').onclick = minusHandler;
+            document.getElementById('modalConfirmBtn').onclick = confirmHandler;
+            document.getElementById('modalCancelBtn').onclick = cancelHandler;
+            
+            // Keyboard support
+            const keyHandler = (e) => {
+                if (e.key === '+' || e.key === '=') { plusHandler(); e.preventDefault(); }
+                else if (e.key === '-' || e.key === '_') { minusHandler(); e.preventDefault(); }
+                else if (e.key === 'Enter') { confirmHandler(); e.preventDefault(); }
+                else if (e.key === 'Escape') { cancelHandler(); e.preventDefault(); }
+            };
+            document.addEventListener('keydown', keyHandler);
+            
+            // Clean up
+            const observer = new MutationObserver(() => {
+                if (!document.body.contains(modal)) {
+                    document.removeEventListener('keydown', keyHandler);
+                    observer.disconnect();
+                }
+            });
+            observer.observe(document.body, { childList: true });
+        });
     }
     
     // Start a brand new game (clears all state)
-    function startNewGame() {
+    async function startNewGame() {
         if (isResetting) {
             console.log('Already resetting, ignoring duplicate call');
             return;
@@ -303,8 +437,7 @@
         
         isResetting = true;
         
-        // Generate fresh game ID
-        const newAgentCount = promptAgentCount();
+        const newAgentCount = await promptAgentCount();
         if (newAgentCount === null) {
             isResetting = false;
             return;
@@ -314,15 +447,13 @@
         document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
         
         const uniqueGameId = generateGameId();
-        expectedNextGameId = uniqueGameId;  // Set expected ID to filter messages
+        expectedNextGameId = uniqueGameId;
         currentGameId = uniqueGameId;
         document.getElementById('gameIdBadge').textContent = `Game: ${uniqueGameId.substring(0, 20)}...`;
         
-        // Reset game over flags
         gameOver = false;
         currentWinner = null;
         
-        // Re-enable UI
         const nextBtn = document.getElementById('nextCycleBtn');
         nextBtn.disabled = false;
         nextBtn.style.opacity = '1';
@@ -352,25 +483,21 @@
             connect();
         }
         
-        // Reset the flag after a delay to allow the game to initialize
         setTimeout(() => {
             isResetting = false;
         }, 1000);
     }
     
-    // Handle game over - show alert then automatically start new game when OK is pressed
     function handleGameOver(winner) {
-        if (gameOver) return;  // Already handled
-        if (isResetting) return;  // Already resetting
+        if (gameOver) return;
+        if (isResetting) return;
         
         gameOver = true;
         currentWinner = winner;
         
-        // Disable UI during game over state
         const nextBtn = document.getElementById('nextCycleBtn');
         nextBtn.disabled = true;
         nextBtn.style.opacity = '0.5';
-        nextBtn.title = 'Game over - click OK to start new game';
         
         const nudgeUpBtn = document.getElementById('nudgeUpBtn');
         const nudgeDownBtn = document.getElementById('nudgeDownBtn');
@@ -381,15 +508,12 @@
         nudgeAgentSelect.disabled = true;
         nudgeTraitSelect.disabled = true;
         
-        // Show alert - when OK is pressed, start a new game automatically
         alert(`GAME OVER! ${winner.toUpperCase()} WINS!\n\nClick OK to start a fresh game.`);
         
-        // After OK is pressed, start a new game
         startNewGame();
     }
     
     function connect() {
-        // Close existing connection if any
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.close();
         }
@@ -399,10 +523,11 @@
         
         ws = new WebSocket(wsUrl);
         
-        ws.onopen = () => {
+        ws.onopen = async () => {
             document.getElementById('status').innerHTML = '<span class="connected">●</span> Connected';
             
-            currentAgentCount = promptAgentCount();
+            currentAgentCount = await promptAgentCount();
+            if (currentAgentCount === null) currentAgentCount = 20;
             document.getElementById('agentCountBadge').textContent = `Agents: ${currentAgentCount}`;
             
             const uniqueGameId = generateGameId();
@@ -426,14 +551,12 @@
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             
-            // IGNORE messages from old games after reset
             if (msg.data && msg.data.gameId && expectedNextGameId && msg.data.gameId !== expectedNextGameId) {
                 console.log(`Ignoring message from old game ${msg.data.gameId}, expecting ${expectedNextGameId}`);
                 return;
             }
             
             if (msg.type === 'state') {
-                // Only update UI if this is our current game
                 if (msg.data.gameId === currentGameId || !expectedNextGameId) {
                     updateUI(msg.data);
                     if (msg.data.gameOver && !gameOver && !isResetting) {
@@ -442,7 +565,6 @@
                 }
             }
             if (msg.type === 'cycle_complete') {
-                // Only process if this is our current game and not already resetting
                 if (msg.data.gameId === currentGameId && !isResetting) {
                     updateUI(msg.data);
                     if (msg.winner && !gameOver) {
@@ -467,7 +589,6 @@
     }
     
     function updateUI(state) {
-        // Safety check - don't update UI if game IDs don't match during reset
         if (expectedNextGameId && state.gameId !== expectedNextGameId && state.gameId !== currentGameId) {
             return;
         }
@@ -563,34 +684,92 @@
         
         if (ws && ws.readyState === WebSocket.OPEN && currentGameId) {
             ws.send(JSON.stringify({ type: 'nudge', agentId, trait, delta }));
+            showToast(`Nudging Agent ${agentId}: ${trait} ${delta > 0 ? '+' : ''}${delta}`);
         } else {
             console.warn('Cannot send nudge - WebSocket not connected');
         }
     }
     
-    let gamepadInterval = null;
-    let lastA = false;
-    let lastX = false;
-    
+    // Enhanced controller polling with triggers and all buttons
     function pollGamepad() {
         const gamepads = navigator.getGamepads();
         const gp = gamepads[0];
-        if (gp && gp.buttons) {
-            const aPressed = gp.buttons[0].pressed;
-            if (aPressed && !lastA) {
+        
+        if (gp) {
+            updateControllerOverlay(true);
+            
+            // Get trigger values (axes 2 and 3 on Xbox, or buttons 6/7)
+            // Xbox triggers are typically axes 2 (left) and 3 (right)
+            const leftTriggerValue = gp.axes[2] !== undefined ? gp.axes[2] : 0;
+            const rightTriggerValue = gp.axes[3] !== undefined ? gp.axes[3] : 0;
+            
+            const leftTriggerPressed = leftTriggerValue > 0.3;
+            const rightTriggerPressed = rightTriggerValue > 0.3;
+            
+            // A Button (index 0) - Next Cycle
+            const aPressed = gp.buttons[0]?.pressed || false;
+            if (aPressed && !lastA && !isPromptActive) {
                 nextCycle();
+                showToast('🎮 Next Cycle');
             }
             lastA = aPressed;
             
-            const xPressed = gp.buttons[2].pressed;
-            if (xPressed && !lastX) {
+            // X Button (index 2) - Nudge +0.1
+            const xPressed = gp.buttons[2]?.pressed || false;
+            if (xPressed && !lastX && !isPromptActive) {
                 const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
                 const trait = document.getElementById('nudgeTraitSelect').value;
                 if (!isNaN(agentId)) {
                     nudgeAgent(agentId, trait, 0.1);
+                    showToast(`🎮 Nudge +0.1: ${trait}`);
                 }
             }
             lastX = xPressed;
+            
+            // Y Button (index 3) - Nudge -0.1 (NEW)
+            const yPressed = gp.buttons[3]?.pressed || false;
+            if (yPressed && !lastY && !isPromptActive) {
+                const agentId = parseInt(document.getElementById('nudgeAgentSelect').value);
+                const trait = document.getElementById('nudgeTraitSelect').value;
+                if (!isNaN(agentId)) {
+                    nudgeAgent(agentId, trait, -0.1);
+                    showToast(`🎮 Nudge -0.1: ${trait}`);
+                }
+            }
+            lastY = yPressed;
+            
+            // B Button (index 1) - New Game (NEW)
+            const bPressed = gp.buttons[1]?.pressed || false;
+            if (bPressed && !lastB && !isPromptActive) {
+                showToast('🎮 Starting new game...');
+                startNewGame();
+            }
+            lastB = bPressed;
+            
+            // Left Trigger - Only active during prompt
+            if (leftTriggerPressed && !lastLeftTrigger && isPromptActive) {
+                // Simulate click on minus button in modal if it exists
+                const minusBtn = document.getElementById('modalMinusBtn');
+                if (minusBtn) {
+                    minusBtn.click();
+                    showToast('🎮 -10 agents');
+                }
+            }
+            lastLeftTrigger = leftTriggerPressed;
+            
+            // Right Trigger - Only active during prompt
+            if (rightTriggerPressed && !lastRightTrigger && isPromptActive) {
+                // Simulate click on plus button in modal if it exists
+                const plusBtn = document.getElementById('modalPlusBtn');
+                if (plusBtn) {
+                    plusBtn.click();
+                    showToast('🎮 +10 agents');
+                }
+            }
+            lastRightTrigger = rightTriggerPressed;
+            
+        } else {
+            updateControllerOverlay(false);
         }
     }
     
@@ -609,6 +788,8 @@
     
     window.addEventListener('gamepadconnected', (e) => {
         console.log('Gamepad connected:', e.gamepad.id);
+        showToast(`🎮 ${e.gamepad.id} connected!`);
+        updateControllerOverlay(true);
         if (!gamepadInterval) {
             gamepadInterval = setInterval(pollGamepad, 100);
         }
@@ -616,13 +797,17 @@
     
     window.addEventListener('gamepaddisconnected', (e) => {
         console.log('Gamepad disconnected');
+        showToast('🎮 Controller disconnected');
+        updateControllerOverlay(false);
         if (gamepadInterval && !navigator.getGamepads().some(g => g)) {
             clearInterval(gamepadInterval);
             gamepadInterval = null;
         }
     });
     
-    // Start the application
+    // Start polling anyway (will detect when controller connects)
+    gamepadInterval = setInterval(pollGamepad, 100);
+    
     connect();
 </script>
 </body>
